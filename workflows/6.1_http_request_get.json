@@ -1,0 +1,212 @@
+{
+  "name": "6.1_http_request_get",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "a1b2c3d4-0001-4a00-8000-000000000001",
+      "name": "When clicking 'Execute workflow'"
+    },
+    {
+      "parameters": {
+        "url": "https://jsonplaceholder.typicode.com/posts/1",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        208,
+        0
+      ],
+      "id": "a1b2c3d4-0002-4a00-8000-000000000002",
+      "name": "HTTP Request - GET Post"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "6e2b1a9b-0001-4a00-8000-000000000011",
+              "name": "postId",
+              "value": "={{ $json.id }}",
+              "type": "number"
+            },
+            {
+              "id": "6e2b1a9b-0002-4a00-8000-000000000012",
+              "name": "title",
+              "value": "={{ $json.title }}",
+              "type": "string"
+            },
+            {
+              "id": "6e2b1a9b-0003-4a00-8000-000000000013",
+              "name": "body",
+              "value": "={{ $json.body }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        416,
+        0
+      ],
+      "id": "a1b2c3d4-0003-4a00-8000-000000000003",
+      "name": "Extract Fields from Response"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "8f3c2d1e-0001-4a00-8000-000000000021",
+              "leftValue": "={{ $json.title }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        624,
+        0
+      ],
+      "id": "a1b2c3d4-0004-4a00-8000-000000000004",
+      "name": "Validate Title Not Empty"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "9d4e5f6a-0001-4a00-8000-000000000031",
+              "name": "result",
+              "value": "=PASS: Post {{ $json.postId }} returned a valid title -> \"{{ $json.title }}\"",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        832,
+        -100
+      ],
+      "id": "a1b2c3d4-0005-4a00-8000-000000000005",
+      "name": "Test Passed"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "9d4e5f6a-0002-4a00-8000-000000000032",
+              "name": "result",
+              "value": "=FAIL: Post {{ $json.postId }} returned an empty title",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        832,
+        100
+      ],
+      "id": "a1b2c3d4-0006-4a00-8000-000000000006",
+      "name": "Test Failed"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking 'Execute workflow'": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request - GET Post",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request - GET Post": {
+      "main": [
+        [
+          {
+            "node": "Extract Fields from Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Fields from Response": {
+      "main": [
+        [
+          {
+            "node": "Validate Title Not Empty",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Title Not Empty": {
+      "main": [
+        [
+          {
+            "node": "Test Passed",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Test Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "b0000000-0000-4000-8000-000000000001",
+  "meta": {
+    "instanceId": "d4fd626aac667aafe8853a30557889c2711020a336e42d081a06267d32694745"
+  },
+  "nodeGroups": [],
+  "id": "http6100get000001",
+  "tags": []
+}

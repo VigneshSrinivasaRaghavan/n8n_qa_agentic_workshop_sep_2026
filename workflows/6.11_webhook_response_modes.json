@@ -1,0 +1,163 @@
+{
+  "name": "6.11_webhook_response_modes",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "webhook-demo-3",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "gg110001-0000-4a00-8000-000000000001",
+      "name": "Webhook",
+      "webhookId": "f1e2d3c4-0003-4a00-8000-000000000003"
+    },
+    {
+      "parameters": {
+        "amount": 3
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        208,
+        0
+      ],
+      "id": "gg110002-0000-4a00-8000-000000000002",
+      "name": "Simulate Agent Thinking (3s)",
+      "webhookId": "f1e2d3c4-0003-4a00-8000-000000000004"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "gg110003-0000-4a00-8000-000000000010",
+              "name": "status",
+              "value": "success",
+              "type": "string"
+            },
+            {
+              "id": "gg110004-0000-4a00-8000-000000000011",
+              "name": "message",
+              "value": "=Processed request for {{ $json.body.testerName }} after simulated processing time",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        416,
+        0
+      ],
+      "id": "gg110005-0000-4a00-8000-000000000003",
+      "name": "Prepare Response Data"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"status\": $json.status, \"message\": $json.message } }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        624,
+        0
+      ],
+      "id": "gg110006-0000-4a00-8000-000000000004",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "gg110007-0000-4a00-8000-000000000020",
+              "name": "logNote",
+              "value": "=Caller already received the response. This node runs afterwards to simulate background logging/cleanup.",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        832,
+        0
+      ],
+      "id": "gg110008-0000-4a00-8000-000000000005",
+      "name": "Background Logging After Response"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Simulate Agent Thinking (3s)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simulate Agent Thinking (3s)": {
+      "main": [
+        [
+          {
+            "node": "Prepare Response Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Response Data": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond to Webhook": {
+      "main": [
+        [
+          {
+            "node": "Background Logging After Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "l0000000-0000-4000-8000-000000000001",
+  "meta": {
+    "instanceId": "d4fd626aac667aafe8853a30557889c2711020a336e42d081a06267d32694745"
+  },
+  "nodeGroups": [],
+  "id": "webhook6110response01",
+  "tags": []
+}

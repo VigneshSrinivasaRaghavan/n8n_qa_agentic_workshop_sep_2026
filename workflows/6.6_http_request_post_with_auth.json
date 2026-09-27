@@ -1,0 +1,199 @@
+{
+  "name": "6.6_http_request_post_with_auth",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [0, 0],
+      "id": "bb110001-0000-4a00-8000-000000000001",
+      "name": "When clicking 'Execute workflow'"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "bb110002-0000-4a00-8000-000000000010",
+              "name": "name",
+              "value": "Vignesh",
+              "type": "string"
+            },
+            {
+              "id": "bb110003-0000-4a00-8000-000000000011",
+              "name": "job",
+              "value": "QA Automation Trainer",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [208, 0],
+      "id": "bb110004-0000-4a00-8000-000000000002",
+      "name": "Prepare New User Data"
+    },
+    {
+      "parameters": {
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "method": "POST",
+        "url": "https://reqres.in/api/users",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"name\": \"{{ $json.name }}\",\n  \"job\": \"{{ $json.job }}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [416, 0],
+      "id": "bb110005-0000-4a00-8000-000000000003",
+      "name": "POST Create User (Header Auth)",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "ReqRes Header Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "bb110006-0000-4a00-8000-000000000021",
+              "name": "newUserId",
+              "value": "={{ $json.id }}",
+              "type": "string"
+            },
+            {
+              "id": "bb110007-0000-4a00-8000-000000000022",
+              "name": "createdAt",
+              "value": "={{ $json.createdAt }}",
+              "type": "string"
+            },
+            {
+              "id": "bb110008-0000-4a00-8000-000000000023",
+              "name": "createdName",
+              "value": "={{ $json.name }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [624, 0],
+      "id": "bb110009-0000-4a00-8000-000000000004",
+      "name": "Extract Created User Fields"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "bb11000a-0000-4a00-8000-000000000031",
+              "leftValue": "={{ $json.newUserId }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [832, 0],
+      "id": "bb11000b-0000-4a00-8000-000000000005",
+      "name": "Validate User Created"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "bb11000c-0000-4a00-8000-000000000041",
+              "name": "result",
+              "value": "=PASS: User created with id {{ $json.newUserId }}, name \"{{ $json.createdName }}\", at {{ $json.createdAt }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [1040, -100],
+      "id": "bb11000d-0000-4a00-8000-000000000006",
+      "name": "Test Passed"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "bb11000e-0000-4a00-8000-000000000042",
+              "name": "result",
+              "value": "=FAIL: API did not return a valid id for the created user",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [1040, 100],
+      "id": "bb11000f-0000-4a00-8000-000000000007",
+      "name": "Test Failed"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking 'Execute workflow'": {
+      "main": [[{ "node": "Prepare New User Data", "type": "main", "index": 0 }]]
+    },
+    "Prepare New User Data": {
+      "main": [[{ "node": "POST Create User (Header Auth)", "type": "main", "index": 0 }]]
+    },
+    "POST Create User (Header Auth)": {
+      "main": [[{ "node": "Extract Created User Fields", "type": "main", "index": 0 }]]
+    },
+    "Extract Created User Fields": {
+      "main": [[{ "node": "Validate User Created", "type": "main", "index": 0 }]]
+    },
+    "Validate User Created": {
+      "main": [
+        [{ "node": "Test Passed", "type": "main", "index": 0 }],
+        [{ "node": "Test Failed", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "g0000000-0000-4000-8000-000000000001",
+  "meta": {
+    "instanceId": "d4fd626aac667aafe8853a30557889c2711020a336e42d081a06267d32694745"
+  },
+  "nodeGroups": [],
+  "id": "http6600postauth0001",
+  "tags": []
+}

@@ -1,0 +1,184 @@
+{
+  "name": "6.8_http_request_delete_with_auth",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [0, 0],
+      "id": "dd110001-0000-4a00-8000-000000000001",
+      "name": "When clicking 'Execute workflow'"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "dd110002-0000-4a00-8000-000000000010",
+              "name": "userId",
+              "value": 2,
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [208, 0],
+      "id": "dd110003-0000-4a00-8000-000000000002",
+      "name": "Set User Id To Delete"
+    },
+    {
+      "parameters": {
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "method": "DELETE",
+        "url": "=https://reqres.in/api/users/{{ $json.userId }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [416, 0],
+      "id": "dd110004-0000-4a00-8000-000000000003",
+      "name": "DELETE User (Header Auth)",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "ReqRes Header Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "dd110005-0000-4a00-8000-000000000021",
+              "name": "statusCode",
+              "value": "={{ $json.statusCode }}",
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [624, 0],
+      "id": "dd110006-0000-4a00-8000-000000000004",
+      "name": "Extract Status Code"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "dd110007-0000-4a00-8000-000000000031",
+              "leftValue": "={{ $json.statusCode }}",
+              "rightValue": 204,
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [832, 0],
+      "id": "dd110008-0000-4a00-8000-000000000005",
+      "name": "Validate Delete Status 204"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "dd110009-0000-4a00-8000-000000000041",
+              "name": "result",
+              "value": "=PASS: User deleted successfully, status code {{ $json.statusCode }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [1040, -100],
+      "id": "dd11000a-0000-4a00-8000-000000000006",
+      "name": "Test Passed"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "dd11000b-0000-4a00-8000-000000000042",
+              "name": "result",
+              "value": "=FAIL: Unexpected status code {{ $json.statusCode }} on delete",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [1040, 100],
+      "id": "dd11000c-0000-4a00-8000-000000000007",
+      "name": "Test Failed"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking 'Execute workflow'": {
+      "main": [[{ "node": "Set User Id To Delete", "type": "main", "index": 0 }]]
+    },
+    "Set User Id To Delete": {
+      "main": [[{ "node": "DELETE User (Header Auth)", "type": "main", "index": 0 }]]
+    },
+    "DELETE User (Header Auth)": {
+      "main": [[{ "node": "Extract Status Code", "type": "main", "index": 0 }]]
+    },
+    "Extract Status Code": {
+      "main": [[{ "node": "Validate Delete Status 204", "type": "main", "index": 0 }]]
+    },
+    "Validate Delete Status 204": {
+      "main": [
+        [{ "node": "Test Passed", "type": "main", "index": 0 }],
+        [{ "node": "Test Failed", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "i0000000-0000-4000-8000-000000000001",
+  "meta": {
+    "instanceId": "d4fd626aac667aafe8853a30557889c2711020a336e42d081a06267d32694745"
+  },
+  "nodeGroups": [],
+  "id": "http6800deleteauth001",
+  "tags": []
+}

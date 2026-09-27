@@ -1,0 +1,148 @@
+{
+  "name": "5.10_ai_agent",
+  "nodes": [
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Analyze and write test cases for the following user story.\nUser Story : {{ $json.chatInput }}",
+        "options": {
+          "systemMessage": "You are a QA assistant that creates functional test cases from user stories.\n\nWhen you receive a user story, you MUST first call the \"Ac_Reviewer\" tool, passing it the full user story text.\n\nThe tool will return JSON with a \"decision\" field (\"Approve\" or \"Denied\") and a \"reason\" field.\n\n- If decision = \"Approve\": write exactly 5 clear, numbered functional test cases for the user story (include preconditions, steps, and expected result for each).\n- If decision = \"Denied\": do NOT write any test cases. Instead, tell the user the story's acceptance criteria are not clear enough, and include the tool's \"reason\" so they know what to fix.\n\nAlways call the tool first. Never write test cases without first getting an \"Approve\" decision from the tool."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        176,
+        0
+      ],
+      "id": "1fb36bde-d150-45ba-8c14-89cd7d810c2c",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "model": "openai/gpt-oss-safeguard-20b",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [
+        176,
+        240
+      ],
+      "id": "9778a6dc-1ffd-4e5c-8ec3-2ad588bcf01d",
+      "name": "Groq Chat Model",
+      "credentials": {
+        "groqApi": {
+          "id": "PTObdGFoUkM2Jx51",
+          "name": "Groq account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "description": "Use this tool to check whether a user story's acceptance criteria are clear and complete enough to write functional test cases from. Input: the full user story text (including any acceptance criteria). Output: JSON with \"decision\" (Approve or Denied) and \"reason\". Always call this before writing test cases.",
+        "workflowId": {
+          "__rl": true,
+          "value": "zCje4E65kjRVZLcy",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/zCje4E65kjRVZLcy",
+          "cachedResultName": "5.10_ac_analyzer"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "userStory": "={{ $('When chat message received').item.json.chatInput }}"
+          },
+          "matchingColumns": [
+            "userStory"
+          ],
+          "schema": [
+            {
+              "id": "userStory",
+              "displayName": "userStory",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.2,
+      "position": [
+        320,
+        288
+      ],
+      "id": "e72445cd-743e-4b70-9418-42bb74771f4f",
+      "name": "Call '5.10_ac_analyzer'"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        0
+      ],
+      "id": "d947dfaa-aedc-4680-950f-afed9fb70b37",
+      "name": "When chat message received",
+      "webhookId": "c7ab707a-b683-4130-9b65-29e41c452cae"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Groq Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call '5.10_ac_analyzer'": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When chat message received": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "d6d2677f-b14c-4860-986a-0d57f8a5b17f",
+  "meta": {
+    "instanceId": "d4fd626aac667aafe8853a30557889c2711020a336e42d081a06267d32694745"
+  },
+  "nodeGroups": [],
+  "id": "6mpl5V5V7rpfvJGG",
+  "tags": []
+}

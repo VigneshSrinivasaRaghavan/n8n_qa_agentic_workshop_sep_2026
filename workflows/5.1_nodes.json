@@ -1,0 +1,112 @@
+{
+  "name": "5.1_nodes",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "2d4f611b-df0c-4730-9e15-807e63814ac8",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "f8721ae7-7f19-4012-bb0c-daa0a0201702",
+              "name": "userStory",
+              "value": "As a registered user, I want to reset my password so that I can regain access to my account",
+              "type": "string"
+            },
+            {
+              "id": "af0c7527-7d8c-47cf-84c1-ce008d78d2d0",
+              "name": "featureArea",
+              "value": "Authentication",
+              "type": "string"
+            },
+            {
+              "id": "81ea44df-aa3f-4b74-948e-c78101f8a205",
+              "name": "priority",
+              "value": "High",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        208,
+        0
+      ],
+      "id": "bcf0cb4a-4c45-4e54-b195-33caebb0c5e6",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "832e8c63-b314-4179-b4c4-48161a388316",
+              "name": "testingScope",
+              "value": "={{ $json.featureArea }} - Password Reset",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        416,
+        0
+      ],
+      "id": "1f67e861-1f64-44cc-8aac-331c5988c440",
+      "name": "Map QA fields"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "Map QA fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "c8e04d88-4f15-46c5-8bf5-0b1f27c125da",
+  "meta": {
+    "instanceId": "d4fd626aac667aafe8853a30557889c2711020a336e42d081a06267d32694745"
+  },
+  "nodeGroups": [],
+  "id": "QCzUdADgqEwVKBEy",
+  "tags": []
+}

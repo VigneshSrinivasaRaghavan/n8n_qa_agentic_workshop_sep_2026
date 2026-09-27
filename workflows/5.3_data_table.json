@@ -1,0 +1,208 @@
+{
+  "name": "5.3_data_table",
+  "nodes": [
+    {
+      "parameters": {
+        "formTitle": "Log Test Case",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Test ID",
+              "fieldType": "textarea"
+            },
+            {
+              "fieldLabel": "User Story"
+            },
+            {
+              "fieldLabel": "Title",
+              "fieldType": "textarea"
+            },
+            {
+              "fieldLabel": "Type",
+              "fieldType": "textarea"
+            },
+            {
+              "fieldLabel": "Priority",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "Low"
+                  },
+                  {
+                    "option": "Medium"
+                  },
+                  {
+                    "option": "High"
+                  }
+                ]
+              }
+            },
+            {
+              "fieldLabel": "Steps",
+              "fieldType": "textarea"
+            },
+            {
+              "fieldLabel": "Expected Result",
+              "fieldType": "textarea"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.6,
+      "position": [
+        0,
+        0
+      ],
+      "id": "26e33ab7-133a-4552-b02b-f357bdbc03ba",
+      "name": "Log Test Case",
+      "webhookId": "3b4ab81d-5365-4118-a0fb-1da2f45c10b5"
+    },
+    {
+      "parameters": {
+        "dataTableId": {
+          "__rl": true,
+          "value": "AYkyLhwejvS1xWqX",
+          "mode": "list",
+          "cachedResultName": "TestCases",
+          "cachedResultUrl": "/projects/F2CfGLhQdzwXJThj/datatables/AYkyLhwejvS1xWqX"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "testId": "={{ $json[\"Test ID\"] }}",
+            "userStory": "={{ $json[\"User Story\"] }}",
+            "title": "={{ $json.Title }}",
+            "type": "={{ $json.Type }}",
+            "steps": "={{ $json.Steps }}",
+            "expectedResult": "={{ $json[\"Expected Result\"] }}",
+            "priority": "={{ $json.Priority }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "testId",
+              "displayName": "testId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "userStory",
+              "displayName": "userStory",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "title",
+              "displayName": "title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "type",
+              "displayName": "type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "steps",
+              "displayName": "steps",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "expectedResult",
+              "displayName": "expectedResult",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "priority",
+              "displayName": "priority",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        208,
+        0
+      ],
+      "id": "6b2c0309-59f8-408a-8195-81b99d906c48",
+      "name": "Insert row"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Log Test Case": {
+      "main": [
+        [
+          {
+            "node": "Insert row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "9bafc851-bf93-4e35-acce-75c8db0d44b2",
+  "meta": {
+    "instanceId": "d4fd626aac667aafe8853a30557889c2711020a336e42d081a06267d32694745"
+  },
+  "nodeGroups": [],
+  "id": "teXcZiWIiQteqJGm",
+  "tags": []
+}

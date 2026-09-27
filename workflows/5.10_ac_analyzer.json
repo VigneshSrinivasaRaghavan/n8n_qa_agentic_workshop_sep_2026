@@ -1,0 +1,97 @@
+{
+  "name": "5.10_ac_analyzer",
+  "nodes": [
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "userStory"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "id": "ef279d85-5c41-48dc-9abc-88375552cae3",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are a senior QA analyst. Analyse this user story and its acceptance criteria.\n\nUser Story:\n{{ $json.userStory }}\n\nIf the acceptance criteria are clear and complete enough to write functional test cases, set decision to \"Approve\".\nIf the story needs clearer or more complete acceptance criteria before test cases can be written, set decision to \"Denied\".\n\nRespond with ONLY valid JSON in exactly this shape, no extra text, no markdown fences:\n{\n  \"decision\": \"Approve\" or \"Denied\",\n  \"reason\": \"a short explanation of the decision\"\n}",
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        208,
+        0
+      ],
+      "id": "895e49c3-7310-4bca-ab89-2a6979adfca8",
+      "name": "Basic LLM Chain"
+    },
+    {
+      "parameters": {
+        "model": "openai/gpt-oss-20b",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [
+        144,
+        208
+      ],
+      "id": "a23f2555-5446-4d01-9619-08de79210dee",
+      "name": "Groq Chat Model",
+      "credentials": {
+        "groqApi": {
+          "id": "PTObdGFoUkM2Jx51",
+          "name": "Groq account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "92a1b01c-405b-432b-a9e5-216f542e6c92",
+  "meta": {
+    "instanceId": "d4fd626aac667aafe8853a30557889c2711020a336e42d081a06267d32694745"
+  },
+  "nodeGroups": [],
+  "id": "zCje4E65kjRVZLcy",
+  "tags": []
+}

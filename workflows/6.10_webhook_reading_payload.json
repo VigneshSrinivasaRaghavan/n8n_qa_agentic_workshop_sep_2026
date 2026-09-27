@@ -1,0 +1,193 @@
+{
+  "name": "6.10_webhook_reading_payload",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "webhook-demo-2",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "ff110001-0000-4a00-8000-000000000001",
+      "name": "Webhook",
+      "webhookId": "f1e2d3c4-0002-4a00-8000-000000000002"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "ff110002-0000-4a00-8000-000000000010",
+              "name": "testerName",
+              "value": "={{ $json.body.testerName }}",
+              "type": "string"
+            },
+            {
+              "id": "ff110003-0000-4a00-8000-000000000011",
+              "name": "userStory",
+              "value": "={{ $json.body.userStory }}",
+              "type": "string"
+            },
+            {
+              "id": "ff110004-0000-4a00-8000-000000000012",
+              "name": "priority",
+              "value": "={{ $json.body.priority }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        208,
+        0
+      ],
+      "id": "ff110005-0000-4a00-8000-000000000002",
+      "name": "Extract Fields From Payload"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ff110006-0000-4a00-8000-000000000021",
+              "leftValue": "={{ $json.userStory }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        416,
+        0
+      ],
+      "id": "ff110007-0000-4a00-8000-000000000003",
+      "name": "Validate userStory Present"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "ff110008-0000-4a00-8000-000000000041",
+              "name": "result",
+              "value": "=Received valid request from {{ $json.testerName }}. Priority: {{ $json.priority }}. User Story: {{ $json.userStory }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        624,
+        -100
+      ],
+      "id": "ff110009-0000-4a00-8000-000000000004",
+      "name": "Valid Payload"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "ff11000a-0000-4a00-8000-000000000042",
+              "name": "result",
+              "value": "=ERROR: 'userStory' field is missing in the request payload",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        624,
+        100
+      ],
+      "id": "ff11000b-0000-4a00-8000-000000000005",
+      "name": "Invalid Payload"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Extract Fields From Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Fields From Payload": {
+      "main": [
+        [
+          {
+            "node": "Validate userStory Present",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate userStory Present": {
+      "main": [
+        [
+          {
+            "node": "Valid Payload",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Invalid Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "k0000000-0000-4000-8000-000000000001",
+  "meta": {
+    "instanceId": "d4fd626aac667aafe8853a30557889c2711020a336e42d081a06267d32694745"
+  },
+  "nodeGroups": [],
+  "id": "webhook6100payload01",
+  "tags": []
+}

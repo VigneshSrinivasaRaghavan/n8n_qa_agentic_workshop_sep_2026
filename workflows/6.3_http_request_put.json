@@ -1,0 +1,255 @@
+{
+  "name": "6.3_http_request_put",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "e1f2a3b4-0001-4a00-8000-000000000001",
+      "name": "When clicking 'Execute workflow'"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "f2a3b4c5-0001-4a00-8000-000000000010",
+              "name": "postId",
+              "value": 1,
+              "type": "number"
+            },
+            {
+              "id": "f2a3b4c5-0002-4a00-8000-000000000011",
+              "name": "updatedTitle",
+              "value": "Updated Title from n8n Workshop",
+              "type": "string"
+            },
+            {
+              "id": "f2a3b4c5-0003-4a00-8000-000000000012",
+              "name": "updatedBody",
+              "value": "This post body was updated using the HTTP Request node (PUT).",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        208,
+        0
+      ],
+      "id": "e1f2a3b4-0002-4a00-8000-000000000002",
+      "name": "Prepare Update Data"
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "=https://jsonplaceholder.typicode.com/posts/{{ $json.postId }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"id\": {{ $json.postId }},\n  \"title\": \"{{ $json.updatedTitle }}\",\n  \"body\": \"{{ $json.updatedBody }}\",\n  \"userId\": 1\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        416,
+        0
+      ],
+      "id": "e1f2a3b4-0003-4a00-8000-000000000003",
+      "name": "HTTP Request - PUT Update"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a3b4c5d6-0001-4a00-8000-000000000021",
+              "name": "returnedId",
+              "value": "={{ $json.id }}",
+              "type": "number"
+            },
+            {
+              "id": "a3b4c5d6-0002-4a00-8000-000000000022",
+              "name": "returnedTitle",
+              "value": "={{ $json.title }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        624,
+        0
+      ],
+      "id": "e1f2a3b4-0004-4a00-8000-000000000004",
+      "name": "Extract Updated Fields"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "b4c5d6e7-0001-4a00-8000-000000000031",
+              "leftValue": "={{ $json.returnedTitle }}",
+              "rightValue": "={{ $('Prepare Update Data').item.json.updatedTitle }}",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        832,
+        0
+      ],
+      "id": "e1f2a3b4-0005-4a00-8000-000000000005",
+      "name": "Validate Title Updated"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c5d6e7f8-0001-4a00-8000-000000000041",
+              "name": "result",
+              "value": "=PASS: Post {{ $json.returnedId }} title updated correctly to \"{{ $json.returnedTitle }}\"",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        1040,
+        -100
+      ],
+      "id": "e1f2a3b4-0006-4a00-8000-000000000006",
+      "name": "Test Passed"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c5d6e7f8-0002-4a00-8000-000000000042",
+              "name": "result",
+              "value": "=FAIL: Returned title does not match the update sent",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        1040,
+        100
+      ],
+      "id": "e1f2a3b4-0007-4a00-8000-000000000007",
+      "name": "Test Failed"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking 'Execute workflow'": {
+      "main": [
+        [
+          {
+            "node": "Prepare Update Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Update Data": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request - PUT Update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request - PUT Update": {
+      "main": [
+        [
+          {
+            "node": "Extract Updated Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Updated Fields": {
+      "main": [
+        [
+          {
+            "node": "Validate Title Updated",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Title Updated": {
+      "main": [
+        [
+          {
+            "node": "Test Passed",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Test Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "d0000000-0000-4000-8000-000000000001",
+  "meta": {
+    "instanceId": "d4fd626aac667aafe8853a30557889c2711020a336e42d081a06267d32694745"
+  },
+  "nodeGroups": [],
+  "id": "http6300put000001",
+  "tags": []
+}

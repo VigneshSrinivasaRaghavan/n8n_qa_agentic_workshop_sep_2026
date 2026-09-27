@@ -1,0 +1,85 @@
+{
+  "name": "6.12_webhook_with_auth",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "webhook-demo-4",
+        "authentication": "headerAuth",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "hh110001-0000-4a00-8000-000000000001",
+      "name": "Webhook (Header Auth Required)",
+      "webhookId": "f1e2d3c4-0004-4a00-8000-000000000005",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Incoming Webhook Header Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "hh110002-0000-4a00-8000-000000000010",
+              "name": "status",
+              "value": "authorized",
+              "type": "string"
+            },
+            {
+              "id": "hh110003-0000-4a00-8000-000000000011",
+              "name": "message",
+              "value": "=Request accepted. Payload received from {{ $json.body.testerName }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        208,
+        0
+      ],
+      "id": "hh110004-0000-4a00-8000-000000000002",
+      "name": "Process Authorized Request"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook (Header Auth Required)": {
+      "main": [
+        [
+          {
+            "node": "Process Authorized Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "m0000000-0000-4000-8000-000000000001",
+  "meta": {
+    "instanceId": "d4fd626aac667aafe8853a30557889c2711020a336e42d081a06267d32694745"
+  },
+  "nodeGroups": [],
+  "id": "webhook6120authreq01",
+  "tags": []
+}

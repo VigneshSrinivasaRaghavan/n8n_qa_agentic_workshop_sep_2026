@@ -1,0 +1,287 @@
+{
+  "name": "6.5_http_request_get_with_auth",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "aa110001-0000-4a00-8000-000000000001",
+      "name": "When clicking 'Execute workflow'"
+    },
+    {
+      "parameters": {
+        "url": "https://reqres.in/api/users/2",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        208,
+        0
+      ],
+      "id": "aa110002-0000-4a00-8000-000000000002",
+      "name": "GET Without API Key (Expect 401)",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "aa110003-0000-4a00-8000-000000000011",
+              "name": "noAuthStatusCode",
+              "value": "={{ $json.statusCode }}",
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        416,
+        0
+      ],
+      "id": "aa110004-0000-4a00-8000-000000000003",
+      "name": "Log Unauthorized Result"
+    },
+    {
+      "parameters": {
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "url": "https://reqres.in/api/users/2",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        624,
+        0
+      ],
+      "id": "aa110005-0000-4a00-8000-000000000004",
+      "name": "GET With API Key (Header Auth)",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "ReqRes Header Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "aa110006-0000-4a00-8000-000000000021",
+              "name": "userId",
+              "value": "={{ $json.data.id }}",
+              "type": "number"
+            },
+            {
+              "id": "aa110007-0000-4a00-8000-000000000022",
+              "name": "firstName",
+              "value": "={{ $json.data.first_name }}",
+              "type": "string"
+            },
+            {
+              "id": "aa110008-0000-4a00-8000-000000000023",
+              "name": "email",
+              "value": "={{ $json.data.email }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        832,
+        0
+      ],
+      "id": "aa110009-0000-4a00-8000-000000000005",
+      "name": "Extract User Fields"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "aa11000a-0000-4a00-8000-000000000031",
+              "leftValue": "={{ $json.email }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1040,
+        0
+      ],
+      "id": "aa11000b-0000-4a00-8000-000000000006",
+      "name": "Validate Email Not Empty"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "aa11000c-0000-4a00-8000-000000000041",
+              "name": "result",
+              "value": "=PASS: Authenticated GET succeeded. User {{ $json.userId }} - {{ $json.firstName }} ({{ $json.email }}). Unauthenticated call earlier returned status {{ $('Log Unauthorized Result').item.json.noAuthStatusCode }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        1248,
+        -100
+      ],
+      "id": "aa11000d-0000-4a00-8000-000000000007",
+      "name": "Test Passed"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "aa11000e-0000-4a00-8000-000000000042",
+              "name": "result",
+              "value": "=FAIL: Authenticated GET did not return a valid user email",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        1248,
+        100
+      ],
+      "id": "aa11000f-0000-4a00-8000-000000000008",
+      "name": "Test Failed"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking 'Execute workflow'": {
+      "main": [
+        [
+          {
+            "node": "GET Without API Key (Expect 401)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GET Without API Key (Expect 401)": {
+      "main": [
+        [
+          {
+            "node": "Log Unauthorized Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Unauthorized Result": {
+      "main": [
+        [
+          {
+            "node": "GET With API Key (Header Auth)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GET With API Key (Header Auth)": {
+      "main": [
+        [
+          {
+            "node": "Extract User Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract User Fields": {
+      "main": [
+        [
+          {
+            "node": "Validate Email Not Empty",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Email Not Empty": {
+      "main": [
+        [
+          {
+            "node": "Test Passed",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Test Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "f0000000-0000-4000-8000-000000000001",
+  "meta": {
+    "instanceId": "d4fd626aac667aafe8853a30557889c2711020a336e42d081a06267d32694745"
+  },
+  "nodeGroups": [],
+  "id": "http6500getauth00001",
+  "tags": []
+}

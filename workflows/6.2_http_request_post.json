@@ -1,0 +1,255 @@
+{
+  "name": "6.2_http_request_post",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "b1c2d3e4-0001-4a00-8000-000000000001",
+      "name": "When clicking 'Execute workflow'"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c2d3e4f5-0001-4a00-8000-000000000010",
+              "name": "title",
+              "value": "n8n QA Workshop Post",
+              "type": "string"
+            },
+            {
+              "id": "c2d3e4f5-0002-4a00-8000-000000000011",
+              "name": "body",
+              "value": "This post was created from n8n HTTP Request node demo",
+              "type": "string"
+            },
+            {
+              "id": "c2d3e4f5-0003-4a00-8000-000000000012",
+              "name": "userId",
+              "value": 1,
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        208,
+        0
+      ],
+      "id": "b1c2d3e4-0002-4a00-8000-000000000002",
+      "name": "Prepare Post Data"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://jsonplaceholder.typicode.com/posts",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"title\": \"{{ $json.title }}\",\n  \"body\": \"{{ $json.body }}\",\n  \"userId\": {{ $json.userId }}\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        416,
+        0
+      ],
+      "id": "b1c2d3e4-0003-4a00-8000-000000000003",
+      "name": "HTTP Request - POST Create"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "d3e4f5a6-0001-4a00-8000-000000000021",
+              "name": "newPostId",
+              "value": "={{ $json.id }}",
+              "type": "number"
+            },
+            {
+              "id": "d3e4f5a6-0002-4a00-8000-000000000022",
+              "name": "createdTitle",
+              "value": "={{ $json.title }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        624,
+        0
+      ],
+      "id": "b1c2d3e4-0004-4a00-8000-000000000004",
+      "name": "Extract Created Post Id"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "e4f5a6b7-0001-4a00-8000-000000000031",
+              "leftValue": "={{ $json.newPostId }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        832,
+        0
+      ],
+      "id": "b1c2d3e4-0005-4a00-8000-000000000005",
+      "name": "Validate Post Created"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "f5a6b7c8-0001-4a00-8000-000000000041",
+              "name": "result",
+              "value": "=PASS: New post created with id {{ $json.newPostId }} and title \"{{ $json.createdTitle }}\"",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        1040,
+        -100
+      ],
+      "id": "b1c2d3e4-0006-4a00-8000-000000000006",
+      "name": "Test Passed"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "f5a6b7c8-0002-4a00-8000-000000000042",
+              "name": "result",
+              "value": "=FAIL: API did not return a valid id for the created post",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        1040,
+        100
+      ],
+      "id": "b1c2d3e4-0007-4a00-8000-000000000007",
+      "name": "Test Failed"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking 'Execute workflow'": {
+      "main": [
+        [
+          {
+            "node": "Prepare Post Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Post Data": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request - POST Create",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request - POST Create": {
+      "main": [
+        [
+          {
+            "node": "Extract Created Post Id",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Created Post Id": {
+      "main": [
+        [
+          {
+            "node": "Validate Post Created",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Post Created": {
+      "main": [
+        [
+          {
+            "node": "Test Passed",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Test Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "c0000000-0000-4000-8000-000000000001",
+  "meta": {
+    "instanceId": "d4fd626aac667aafe8853a30557889c2711020a336e42d081a06267d32694745"
+  },
+  "nodeGroups": [],
+  "id": "http6200post000001",
+  "tags": []
+}

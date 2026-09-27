@@ -1,0 +1,174 @@
+{
+  "name": "5.9_sub_worklow",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "43719e8f-3263-4d31-b021-bf9777cbfe69",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "4f443aec-854a-4a9e-bf31-d5c3a88f07a5",
+              "name": "userStory",
+              "value": "As a user, I want to reset my password via email so I can regain access to my account.",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        208,
+        0
+      ],
+      "id": "ad8b3ea6-c986-4a1a-be1b-6f82ce5d0cd9",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "nL8rMQiYiLNshVvn",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/nL8rMQiYiLNshVvn",
+          "cachedResultName": "5.9_testcase_generator_sub_workflow"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "analysis": "={{ $json.text }}"
+          },
+          "matchingColumns": [
+            "analysis"
+          ],
+          "schema": [
+            {
+              "id": "analysis",
+              "displayName": "analysis",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        624,
+        0
+      ],
+      "id": "7f8f281c-83cd-4c4d-b02f-2558891c11d7",
+      "name": "Call '5.9_testcase_generator_sub_workflow'"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "tcdIGId7WsE0yVSw",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/tcdIGId7WsE0yVSw",
+          "cachedResultName": "5.9_requirment_analyzer_sub_workflow"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "userStory": "={{ $json.userStory }}"
+          },
+          "matchingColumns": [
+            "userStory"
+          ],
+          "schema": [
+            {
+              "id": "userStory",
+              "displayName": "userStory",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        416,
+        0
+      ],
+      "id": "e314592c-d2f7-46af-8815-0dbb412c459d",
+      "name": "Call '5.9_requirment_analyzer_sub_workflow'"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "Call '5.9_requirment_analyzer_sub_workflow'",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call '5.9_requirment_analyzer_sub_workflow'": {
+      "main": [
+        [
+          {
+            "node": "Call '5.9_testcase_generator_sub_workflow'",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "a72cd911-8282-4538-9022-cbf4965edca0",
+  "meta": {
+    "instanceId": "d4fd626aac667aafe8853a30557889c2711020a336e42d081a06267d32694745"
+  },
+  "nodeGroups": [],
+  "id": "a2N2facbJ7rHFKAH",
+  "tags": []
+}

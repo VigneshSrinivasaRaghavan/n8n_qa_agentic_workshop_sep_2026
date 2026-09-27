@@ -1,0 +1,68 @@
+{
+  "name": "5.2_forms",
+  "nodes": [
+    {
+      "parameters": {
+        "formTitle": "QA Agent Portal",
+        "formDescription": "Submit a user story for AI-powered QA analysis.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "User Story",
+              "fieldType": "textarea"
+            },
+            {
+              "fieldLabel": "Acceptance Criteria",
+              "fieldType": "textarea"
+            },
+            {
+              "fieldLabel": "Feature Area",
+              "fieldType": "textarea"
+            },
+            {
+              "fieldLabel": "Risk Level",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "Low"
+                  },
+                  {
+                    "option": "Medium"
+                  },
+                  {
+                    "option": "High"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.6,
+      "position": [
+        0,
+        0
+      ],
+      "id": "545d04e9-85da-40e8-b2f5-1d76ebffde2c",
+      "name": "QA Agent Portal",
+      "webhookId": "8f492677-46a9-4d99-b424-70c1cc74d9b6"
+    }
+  ],
+  "pinData": {},
+  "connections": {},
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "2ef8d4ec-26f3-43c1-85f3-2fc726cb875f",
+  "meta": {
+    "instanceId": "d4fd626aac667aafe8853a30557889c2711020a336e42d081a06267d32694745"
+  },
+  "nodeGroups": [],
+  "id": "tjYEGYInV1t5ioat",
+  "tags": []
+}

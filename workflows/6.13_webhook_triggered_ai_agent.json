@@ -1,0 +1,177 @@
+{
+  "name": "6.13_webhook_triggered_ai_agent",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "webhook-testcase-agent",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "ii110001-0000-4a00-8000-000000000001",
+      "name": "Webhook",
+      "webhookId": "f1e2d3c4-0005-4a00-8000-000000000006"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Analyze and write test cases for the following user story.\nUser Story : {{ $json.body.userStory }}",
+        "options": {
+          "systemMessage": "You are a QA assistant that creates functional test cases from user stories.\n\nWhen you receive a user story, you MUST first call the \"Ac_Reviewer\" tool, passing it the full user story text.\n\nThe tool will return JSON with a \"decision\" field (\"Approve\" or \"Denied\") and a \"reason\" field.\n\n- If decision = \"Approve\": write exactly 5 clear, numbered functional test cases for the user story (include preconditions, steps, and expected result for each).\n- If decision = \"Denied\": do NOT write any test cases. Instead, tell the user the story's acceptance criteria are not clear enough, and include the tool's \"reason\" so they know what to fix.\n\nAlways call the tool first. Never write test cases without first getting an \"Approve\" decision from the tool."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        208,
+        0
+      ],
+      "id": "ii110002-0000-4a00-8000-000000000002",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "model": "openai/gpt-oss-safeguard-20b",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [
+        208,
+        240
+      ],
+      "id": "ii110003-0000-4a00-8000-000000000003",
+      "name": "Groq Chat Model",
+      "credentials": {
+        "groqApi": {
+          "id": "PTObdGFoUkM2Jx51",
+          "name": "Groq account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "description": "Use this tool to check whether a user story's acceptance criteria are clear and complete enough to write functional test cases from. Input: the full user story text (including any acceptance criteria). Output: JSON with \"decision\" (Approve or Denied) and \"reason\". Always call this before writing test cases.",
+        "workflowId": {
+          "__rl": true,
+          "value": "zCje4E65kjRVZLcy",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/zCje4E65kjRVZLcy",
+          "cachedResultName": "5.10_ac_analyzer"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "userStory": "={{ $('Webhook').item.json.body.userStory }}"
+          },
+          "matchingColumns": [
+            "userStory"
+          ],
+          "schema": [
+            {
+              "id": "userStory",
+              "displayName": "userStory",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.2,
+      "position": [
+        360,
+        288
+      ],
+      "id": "ii110004-0000-4a00-8000-000000000004",
+      "name": "Call '5.10_ac_analyzer'"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"testCases\": $json.output } }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        416,
+        0
+      ],
+      "id": "ii110005-0000-4a00-8000-000000000005",
+      "name": "Respond to Webhook"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call '5.10_ac_analyzer'": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "n0000000-0000-4000-8000-000000000001",
+  "meta": {
+    "instanceId": "d4fd626aac667aafe8853a30557889c2711020a336e42d081a06267d32694745"
+  },
+  "nodeGroups": [],
+  "id": "webhook6130agent0001",
+  "tags": []
+}

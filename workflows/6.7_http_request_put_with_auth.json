@@ -1,0 +1,192 @@
+{
+  "name": "6.7_http_request_put_with_auth",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [0, 0],
+      "id": "cc110001-0000-4a00-8000-000000000001",
+      "name": "When clicking 'Execute workflow'"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "cc110002-0000-4a00-8000-000000000010",
+              "name": "userId",
+              "value": 2,
+              "type": "number"
+            },
+            {
+              "id": "cc110003-0000-4a00-8000-000000000011",
+              "name": "updatedJob",
+              "value": "Senior QA Automation Trainer",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [208, 0],
+      "id": "cc110004-0000-4a00-8000-000000000002",
+      "name": "Prepare Update Data"
+    },
+    {
+      "parameters": {
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "method": "PUT",
+        "url": "=https://reqres.in/api/users/{{ $json.userId }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"name\": \"Vignesh\",\n  \"job\": \"{{ $json.updatedJob }}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [416, 0],
+      "id": "cc110005-0000-4a00-8000-000000000003",
+      "name": "PUT Update User (Header Auth)",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "ReqRes Header Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "cc110006-0000-4a00-8000-000000000021",
+              "name": "returnedJob",
+              "value": "={{ $json.job }}",
+              "type": "string"
+            },
+            {
+              "id": "cc110007-0000-4a00-8000-000000000022",
+              "name": "updatedAt",
+              "value": "={{ $json.updatedAt }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [624, 0],
+      "id": "cc110008-0000-4a00-8000-000000000004",
+      "name": "Extract Updated Fields"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "cc110009-0000-4a00-8000-000000000031",
+              "leftValue": "={{ $json.returnedJob }}",
+              "rightValue": "={{ $('Prepare Update Data').item.json.updatedJob }}",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [832, 0],
+      "id": "cc11000a-0000-4a00-8000-000000000005",
+      "name": "Validate Job Updated"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "cc11000b-0000-4a00-8000-000000000041",
+              "name": "result",
+              "value": "=PASS: User job updated correctly to \"{{ $json.returnedJob }}\" at {{ $json.updatedAt }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [1040, -100],
+      "id": "cc11000c-0000-4a00-8000-000000000006",
+      "name": "Test Passed"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "cc11000d-0000-4a00-8000-000000000042",
+              "name": "result",
+              "value": "=FAIL: Returned job does not match the update sent",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [1040, 100],
+      "id": "cc11000e-0000-4a00-8000-000000000007",
+      "name": "Test Failed"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking 'Execute workflow'": {
+      "main": [[{ "node": "Prepare Update Data", "type": "main", "index": 0 }]]
+    },
+    "Prepare Update Data": {
+      "main": [[{ "node": "PUT Update User (Header Auth)", "type": "main", "index": 0 }]]
+    },
+    "PUT Update User (Header Auth)": {
+      "main": [[{ "node": "Extract Updated Fields", "type": "main", "index": 0 }]]
+    },
+    "Extract Updated Fields": {
+      "main": [[{ "node": "Validate Job Updated", "type": "main", "index": 0 }]]
+    },
+    "Validate Job Updated": {
+      "main": [
+        [{ "node": "Test Passed", "type": "main", "index": 0 }],
+        [{ "node": "Test Failed", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "h0000000-0000-4000-8000-000000000001",
+  "meta": {
+    "instanceId": "d4fd626aac667aafe8853a30557889c2711020a336e42d081a06267d32694745"
+  },
+  "nodeGroups": [],
+  "id": "http6700putauth00001",
+  "tags": []
+}

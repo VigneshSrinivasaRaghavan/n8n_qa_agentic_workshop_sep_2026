@@ -1,0 +1,78 @@
+{
+  "name": "7.1_webhook_basic_trigger",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "webhook-demo-1",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "ee110001-0000-4a00-8000-000000000001",
+      "name": "Webhook",
+      "webhookId": "f1e2d3c4-0001-4a00-8000-000000000001"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "ee110002-0000-4a00-8000-000000000010",
+              "name": "receivedBody",
+              "value": "={{ $json.body }}",
+              "type": "object"
+            },
+            {
+              "id": "ee110003-0000-4a00-8000-000000000011",
+              "name": "message",
+              "value": "Webhook received your data successfully!",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        208,
+        0
+      ],
+      "id": "ee110004-0000-4a00-8000-000000000002",
+      "name": "Echo Received Data"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Echo Received Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "j0000000-0000-4000-8000-000000000001",
+  "meta": {
+    "instanceId": "d4fd626aac667aafe8853a30557889c2711020a336e42d081a06267d32694745"
+  },
+  "nodeGroups": [],
+  "id": "webhook710basic00001",
+  "tags": []
+}
