@@ -1,0 +1,129 @@
+{
+  "name": "8.4_exploratory_charter_agent",
+  "nodes": [
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.4,
+      "position": [0, 0],
+      "id": "e1f2a3b4-0001-4a00-8000-000000000001",
+      "name": "When chat message received",
+      "webhookId": "e1f2a3b4-0001-4a00-8000-000000000101"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Generate exploratory testing charters for the following Jira user story and its Acceptance Criteria.\n\nUser Story / Acceptance Criteria:\n{{ $json.chatInput }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "You are a senior QA Lead who designs exploratory testing charters for a Jira story and its Acceptance Criteria (AC).\n\nExploratory testing is time-boxed, unscripted testing guided by a short mission - it is deliberately NOT a step-by-step script. Your charters should point testers toward areas that scripted functional test cases typically do NOT cover well, such as:\n- Unusual sequences of actions (e.g. navigating back and forth, double-submitting, interrupting a flow midway)\n- Combinations/interactions between multiple AC behaviors happening together\n- UI/UX feel and usability issues (confusing flows, inconsistent feedback, unclear states)\n- Resilience under odd conditions (slow network, browser refresh mid-action, multiple tabs/sessions, rapid repeated actions)\n- Data and state edge cases that are easy to script individually but easy to miss in combination (e.g. applying two rules at once)\n- Security-adjacent exploratory probing relevant to the feature (e.g. unexpected input in fields, tampering with client-side state) if relevant to the story\n\nGenerate 3 to 5 charters for this story, each targeting a DIFFERENT focus area implied by the story and AC - do not generate generic charters that could apply to any feature. Each charter must have:\n- id: sequential like CH-01, CH-02, ...\n- mission: a single clear sentence describing what to explore and why (e.g. \"Explore the promo code field's behavior under unusual and malformed input to uncover unhandled edge cases.\")\n- focusArea: the specific feature, flow, or risk area this charter targets\n- timeBoxMinutes: a realistic suggested duration as an integer (typically 15 to 45)\n- starterQuestions: an array of 3 to 5 open-ended prompts/questions to kick off exploration (NOT scripted steps - these should provoke investigation, e.g. \"What happens if the user applies the promo code, then rapidly removes and re-adds the same cart item?\")\n- outOfScope: a short string describing what this charter should NOT cover, to keep the tester focused and avoid overlap with other charters\n\nAlso provide:\n- overallFocusSummary: 1-2 sentences summarizing why these particular areas were chosen as the highest-value exploratory targets for this story\n\nBase every charter on the actual content of the story and AC - do not output generic boilerplate. If the AC is too thin to identify meaningful exploratory risk areas, note that in overallFocusSummary and still provide your best reasonable charters based on the story's domain.\n\nYou MUST always respond using the structured JSON output format provided to you. Never add any text outside that JSON structure."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [240, 0],
+      "id": "e1f2a3b4-0002-4a00-8000-000000000002",
+      "name": "Exploratory Charter Agent"
+    },
+    {
+      "parameters": {
+        "model": "openai/gpt-oss-safeguard-20b",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [240, 260],
+      "id": "e1f2a3b4-0003-4a00-8000-000000000003",
+      "name": "Groq Chat Model",
+      "credentials": {
+        "groqApi": {
+          "id": "PTObdGFoUkM2Jx51",
+          "name": "Groq account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"overallFocusSummary\": {\n      \"type\": \"string\"\n    },\n    \"charters\": {\n      \"type\": \"array\",\n      \"items\": {\n        \"type\": \"object\",\n        \"properties\": {\n          \"id\": { \"type\": \"string\" },\n          \"mission\": { \"type\": \"string\" },\n          \"focusArea\": { \"type\": \"string\" },\n          \"timeBoxMinutes\": { \"type\": \"integer\" },\n          \"starterQuestions\": { \"type\": \"array\", \"items\": { \"type\": \"string\" } },\n          \"outOfScope\": { \"type\": \"string\" }\n        },\n        \"required\": [\"id\", \"mission\", \"focusArea\", \"timeBoxMinutes\", \"starterQuestions\", \"outOfScope\"]\n      }\n    }\n  },\n  \"required\": [\"overallFocusSummary\", \"charters\"]\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [420, 260],
+      "id": "e1f2a3b4-0004-4a00-8000-000000000004",
+      "name": "Structured Output Parser"
+    },
+    {
+      "parameters": {
+        "jsCode": "const result = $input.item.json.output;\nconst charters = result.charters || [];\n\nlet md = `**Overall Focus Summary:** ${result.overallFocusSummary}\\n\\n`;\n\nfor (const c of charters) {\n  md += `### [${c.id}] ${c.focusArea} (${c.timeBoxMinutes} min)\\n`;\n  md += `**Mission:** ${c.mission}\\n\\n`;\n  md += `**Starter Questions:**\\n` + c.starterQuestions.map(q => `- ${q}`).join('\\n') + `\\n\\n`;\n  md += `**Out of Scope:** ${c.outOfScope}\\n\\n`;\n}\n\nreturn [{\n  json: {\n    output: md,\n    overallFocusSummary: result.overallFocusSummary,\n    charters\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [620, 0],
+      "id": "e1f2a3b4-0005-4a00-8000-000000000005",
+      "name": "Combine Final Output"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When chat message received": {
+      "main": [
+        [
+          {
+            "node": "Exploratory Charter Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Exploratory Charter Agent": {
+      "main": [
+        [
+          {
+            "node": "Combine Final Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Exploratory Charter Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Exploratory Charter Agent",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "e1f2a3b4-c5d6-4700-8900-000000000001",
+  "meta": {
+    "instanceId": "d4fd626aac667aafe8853a30557889c2711020a336e42d081a06267d32694745"
+  },
+  "nodeGroups": [],
+  "id": "E1F2A3B4ExplChart01",
+  "tags": []
+}

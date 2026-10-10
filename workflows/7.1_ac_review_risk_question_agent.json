@@ -1,0 +1,205 @@
+{
+  "name": "5.13_ac_review_risk_question_agent",
+  "nodes": [
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.4,
+      "position": [0, 0],
+      "id": "a1b2c3d4-0001-4a00-8000-000000000001",
+      "name": "When chat message received",
+      "webhookId": "a1b2c3d4-0001-4a00-8000-000000000101"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Review the following Jira user story and its Acceptance Criteria for gaps and risks.\n\nJira Story / Acceptance Criteria:\n{{ $json.chatInput }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "You are a senior QA Analyst performing a Definition-of-Ready review on a Jira story's Acceptance Criteria (AC), the same way an experienced QA would during backlog refinement.\n\nRead the AC carefully (it may be in plain bullet form or Gherkin Given/When/Then form) and identify every gap or risk that falls into ONLY these three categories:\n\n1. \"Ambiguity\" - wording that is vague, subjective, or open to multiple interpretations (e.g. \"the system should respond quickly\", \"appropriate error message\", undefined terms).\n2. \"Testability\" - a criterion that cannot be objectively verified as pass/fail as written (no measurable condition, no clear expected outcome, no way to observe the result).\n3. \"Missing Negative/Edge Case\" - the AC only describes the happy path and omits error handling, boundary values, invalid input, empty/null states, permission/role variations, or concurrency/duplicate scenarios that are clearly relevant to this story.\n\nDo not invent gaps that are not actually supported by the text. Do not flag minor stylistic issues. Focus on gaps that would genuinely block a QA engineer from writing confident, objective test cases.\n\nFor EACH gap found, provide:\n- id: sequential like GAP-01, GAP-02, ...\n- category: exactly one of \"Ambiguity\", \"Testability\", \"Missing Negative/Edge Case\"\n- severity: \"High\" (blocks reliable testing / major functional risk), \"Medium\" (creates some ambiguity but testing can partially proceed), or \"Low\" (minor, nice-to-clarify)\n- acReference: quote or paraphrase the specific AC line/bullet/scenario this gap relates to (if it is a missing case, describe what scenario is absent)\n- description: a precise explanation of why this is a gap/risk\n\nThen determine:\n- overallRiskLevel: \"High\" if any gap is High severity, else \"Medium\" if any gap is Medium severity, else \"Low\" if only Low severity gaps exist or no gaps at all.\n- verdict: \"Not Ready\" if overallRiskLevel is \"High\", otherwise \"Ready\". A story can still be \"Ready\" with Medium/Low gaps noted for follow-up, but never \"Ready\" with an unresolved High severity gap.\n- summary: 1-3 sentences giving your overall assessment of the AC quality.\n\nIf the AC is clear, complete, and testable with no meaningful gaps, return gaps as an empty array, verdict \"Ready\", overallRiskLevel \"Low\".\n\nYou MUST always respond using the structured JSON output format provided to you. Never add any text outside that JSON structure."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [240, 0],
+      "id": "a1b2c3d4-0002-4a00-8000-000000000002",
+      "name": "AC Review & Risk Agent"
+    },
+    {
+      "parameters": {
+        "model": "openai/gpt-oss-safeguard-20b",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [240, 260],
+      "id": "a1b2c3d4-0003-4a00-8000-000000000003",
+      "name": "Groq Chat Model",
+      "credentials": {
+        "groqApi": {
+          "id": "PTObdGFoUkM2Jx51",
+          "name": "Groq account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"verdict\": {\n      \"type\": \"string\",\n      \"enum\": [\"Ready\", \"Not Ready\"]\n    },\n    \"overallRiskLevel\": {\n      \"type\": \"string\",\n      \"enum\": [\"High\", \"Medium\", \"Low\"]\n    },\n    \"summary\": {\n      \"type\": \"string\",\n      \"description\": \"1-3 sentence overall assessment of the AC quality\"\n    },\n    \"gaps\": {\n      \"type\": \"array\",\n      \"items\": {\n        \"type\": \"object\",\n        \"properties\": {\n          \"id\": { \"type\": \"string\" },\n          \"category\": { \"type\": \"string\", \"enum\": [\"Ambiguity\", \"Testability\", \"Missing Negative/Edge Case\"] },\n          \"severity\": { \"type\": \"string\", \"enum\": [\"High\", \"Medium\", \"Low\"] },\n          \"acReference\": { \"type\": \"string\" },\n          \"description\": { \"type\": \"string\" }\n        },\n        \"required\": [\"id\", \"category\", \"severity\", \"acReference\", \"description\"]\n      }\n    }\n  },\n  \"required\": [\"verdict\", \"overallRiskLevel\", \"summary\", \"gaps\"]\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [420, 260],
+      "id": "a1b2c3d4-0004-4a00-8000-000000000004",
+      "name": "Structured Output Parser"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Based on the identified gaps/risks below in a Jira story's Acceptance Criteria, generate targeted clarifying questions for the Product Owner.\n\nOriginal Story / Acceptance Criteria:\n{{ $('When chat message received').item.json.chatInput }}\n\nOverall Verdict: {{ $json.output.verdict }}\nOverall Risk Level: {{ $json.output.overallRiskLevel }}\n\nIdentified Gaps (JSON):\n{{ JSON.stringify($json.output.gaps) }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "You are a senior QA/BA who converts identified requirement gaps into sharp, specific clarifying questions to send to the Product Owner.\n\nRules:\n1. Generate exactly ONE question per gap in the input list - no more, no fewer. Do not generate questions for gaps that do not exist in the input.\n2. Each question MUST directly reference the specific ambiguous wording, untestable criterion, or missing scenario described in that gap. Never write generic questions like \"Can you clarify this?\" - always name the specific behavior, term, or scenario in question.\n3. Set relatedGapId to the exact id of the gap the question was generated from (e.g. GAP-01).\n4. Set category to the same category as the source gap (\"Ambiguity\", \"Testability\", or \"Missing Negative/Edge Case\").\n5. id should be sequential like Q-01, Q-02, ...\n6. If the gaps list is empty, return an empty questions array and set note to a short confirmation that no clarifying questions are needed because the AC is clear and complete.\n\nYou MUST always respond using the structured JSON output format provided to you. Never add any text outside that JSON structure."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [660, 0],
+      "id": "a1b2c3d4-0005-4a00-8000-000000000005",
+      "name": "Requirement Question Generator"
+    },
+    {
+      "parameters": {
+        "model": "openai/gpt-oss-safeguard-20b",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [660, 260],
+      "id": "a1b2c3d4-0006-4a00-8000-000000000006",
+      "name": "Groq Chat Model1",
+      "credentials": {
+        "groqApi": {
+          "id": "PTObdGFoUkM2Jx51",
+          "name": "Groq account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"questions\": {\n      \"type\": \"array\",\n      \"items\": {\n        \"type\": \"object\",\n        \"properties\": {\n          \"id\": { \"type\": \"string\" },\n          \"relatedGapId\": { \"type\": \"string\" },\n          \"category\": { \"type\": \"string\" },\n          \"question\": { \"type\": \"string\" }\n        },\n        \"required\": [\"id\", \"relatedGapId\", \"category\", \"question\"]\n      }\n    },\n    \"note\": {\n      \"type\": \"string\",\n      \"description\": \"Optional note, e.g. confirmation when there are no gaps to ask about\"\n    }\n  },\n  \"required\": [\"questions\"]\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [840, 260],
+      "id": "a1b2c3d4-0007-4a00-8000-000000000007",
+      "name": "Structured Output Parser1"
+    },
+    {
+      "parameters": {
+        "jsCode": "const review = $('AC Review & Risk Agent').item.json.output;\nconst qOut = $input.item.json.output;\n\nconst gaps = review.gaps || [];\nconst questions = qOut.questions || [];\n\nlet md = `**Verdict:** ${review.verdict}  \\n**Overall Risk Level:** ${review.overallRiskLevel}\\n\\n**Summary:** ${review.summary}\\n\\n`;\n\nif (gaps.length === 0) {\n  md += `No gaps or risks identified in the Acceptance Criteria.\\n`;\n} else {\n  md += `**Identified Gaps / Risks:**\\n`;\n  for (const g of gaps) {\n    md += `- [${g.id}] (${g.category} / ${g.severity}) ${g.acReference} -> ${g.description}\\n`;\n  }\n  md += `\\n**Clarifying Questions:**\\n`;\n  for (const q of questions) {\n    md += `- [${q.id}] (ref ${q.relatedGapId}) ${q.question}\\n`;\n  }\n}\n\nif (qOut.note) {\n  md += `\\n_Note: ${qOut.note}_\\n`;\n}\n\nreturn [{\n  json: {\n    output: md,\n    verdict: review.verdict,\n    overallRiskLevel: review.overallRiskLevel,\n    summary: review.summary,\n    gaps,\n    questions,\n    note: qOut.note || null\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1040, 0],
+      "id": "a1b2c3d4-0008-4a00-8000-000000000008",
+      "name": "Combine Final Output"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When chat message received": {
+      "main": [
+        [
+          {
+            "node": "AC Review & Risk Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AC Review & Risk Agent": {
+      "main": [
+        [
+          {
+            "node": "Requirement Question Generator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AC Review & Risk Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "AC Review & Risk Agent",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Requirement Question Generator": {
+      "main": [
+        [
+          {
+            "node": "Combine Final Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Requirement Question Generator",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser1": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Requirement Question Generator",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "a1b2c3d4-e5f6-4700-8900-000000000001",
+  "meta": {
+    "instanceId": "d4fd626aac667aafe8853a30557889c2711020a336e42d081a06267d32694745"
+  },
+  "nodeGroups": [],
+  "id": "A1B2C3D4RiskQAgnt1",
+  "tags": []
+}

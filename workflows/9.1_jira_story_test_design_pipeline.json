@@ -1,0 +1,287 @@
+{
+  "name": "9.1_jira_story_test_design_pipeline",
+  "nodes": [
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        0
+      ],
+      "id": "d17b7757-ff75-4e58-96ec-52a2a8bbc964",
+      "name": "When chat message received",
+      "webhookId": "f1a2b3c4-0001-4a00-8000-000000000101"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "issueKey": "={{ $json.chatInput.trim() }}",
+        "simplifyOutput": true,
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.jira",
+      "typeVersion": 1,
+      "position": [
+        224,
+        0
+      ],
+      "id": "7b53868b-d604-4be8-a59a-4df212dec8dc",
+      "name": "Get Jira Story",
+      "credentials": {
+        "jiraSoftwareCloudApi": {
+          "id": "j4mAJaEzAaEsHVVO",
+          "name": "Jira SW Cloud account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract issue key, summary, and description text.\n// Handles multiple possible shapes depending on Jira node settings:\n// 1) simplifyOutput=true -> capitalized display keys directly on the item (Summary, Description)\n// 2) raw Jira API shape -> nested under fields.summary / fields.description\n// 3) description may be plain text OR Atlassian Document Format (ADF) JSON\nconst issue = $input.item.json;\n\nconst issueKey = issue.key || issue.id || 'UNKNOWN';\nconst summary = issue.Summary ?? issue.fields?.summary ?? issue.summary ?? '';\n\nlet rawDescription;\nif (issue.Description !== undefined) {\n  rawDescription = issue.Description;\n} else if (issue.fields?.description !== undefined) {\n  rawDescription = issue.fields.description;\n} else {\n  rawDescription = issue.description;\n}\n\nfunction adfToText(node) {\n  if (!node) return '';\n  if (typeof node === 'string') return node;\n  let text = '';\n  if (node.type === 'text' && node.text) {\n    text += node.text;\n  }\n  if (Array.isArray(node.content)) {\n    for (const child of node.content) {\n      text += adfToText(child);\n      if (child.type === 'paragraph' || child.type === 'listItem' || child.type === 'heading') {\n        text += '\\n';\n      }\n    }\n  }\n  return text;\n}\n\nlet descriptionText = '';\nif (!rawDescription) {\n  descriptionText = '(No description provided)';\n} else if (typeof rawDescription === 'string') {\n  descriptionText = rawDescription;\n} else if (typeof rawDescription === 'object') {\n  // Likely ADF (Atlassian Document Format)\n  descriptionText = adfToText(rawDescription).trim();\n  if (!descriptionText) {\n    descriptionText = '(Description present but could not be parsed from ADF format)';\n  }\n}\n\nconst formattedStory = `Story: ${issueKey} - ${summary}\\n\\n${descriptionText}`;\n\nreturn [{\n  json: {\n    issueKey,\n    summary,\n    formattedStory\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        432,
+        0
+      ],
+      "id": "95667a20-55fe-49cf-b018-bb3408818ea2",
+      "name": "Format Jira Story Text"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Analyze the following User Story and its Acceptance Criteria, then generate functional test cases.\n\nUser Story:\n{{ $json.formattedStory }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "You are a senior QA Analyst that writes functional test cases from a user story and its acceptance criteria.\n\nWhen you receive a user story, you MUST first internally review it against these quality checks before doing anything else:\n1. Is there a clear user story statement (As a / I want / So that, or equivalent intent)?\n2. Are there acceptance criteria or enough behavioral detail to know what \"done\" and \"correct\" look like?\n3. Is there enough detail to identify at least positive, negative, and edge case scenarios?\n\nDecide internally:\n- If the story and its acceptance criteria are clear and complete enough, set decision to \"Approve\" and proceed to generate test cases.\n- If the story is vague, missing acceptance criteria, or too ambiguous to test confidently, set decision to \"Denied\". In that case return an empty testCases array, and put a clear explanation of the SPECIFIC missing details in the reason field (e.g. no acceptance criteria, unclear user role, no defined success/failure behavior) so the user can resend an improved story.\n\nIf decision is \"Approve\", generate a reasonable number of test cases based on the complexity of the story (typically 4 to 8, do not force an exact fixed count). Cover positive, negative, and edge cases where relevant. For EACH test case provide:\n- id: sequential like TC-01, TC-02, ...\n- title: short descriptive title\n- type: one of \"Positive\", \"Negative\", \"Edge Case\"\n- priority: one of \"High\", \"Medium\", \"Low\"\n- preconditions: what must be true before running the test\n- steps: numbered steps as a single string (e.g. \"1. ... 2. ... 3. ...\"). Where a step requires specific input data (not just an action), phrase it generically referencing the kind of data needed (e.g. \"Enter a valid email address\" or \"Enter a promo code that has expired\") rather than inventing a specific literal value - the exact data values will be generated separately.\n- expectedResult: the expected outcome\n- dataNeeded: a short list (as a single comma-separated string, or \"None\" if not applicable) of what kinds of input data this test case needs (e.g. \"valid email, valid password\" or \"expired promo code\")\n\nYou MUST always respond using the structured JSON output format provided to you. Never add any text outside that JSON structure. Never generate test cases if the story fails the internal quality check."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        640,
+        0
+      ],
+      "id": "9279ada0-4d14-43db-b944-f6995cc2fb8c",
+      "name": "AI Test Case Generator"
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"decision\": {\n      \"type\": \"string\",\n      \"enum\": [\"Approve\", \"Denied\"]\n    },\n    \"reason\": {\n      \"type\": \"string\",\n      \"description\": \"Explanation of the decision. Required detail when Denied; can be a short confirmation note when Approved.\"\n    },\n    \"testCases\": {\n      \"type\": \"array\",\n      \"items\": {\n        \"type\": \"object\",\n        \"properties\": {\n          \"id\": { \"type\": \"string\" },\n          \"title\": { \"type\": \"string\" },\n          \"type\": { \"type\": \"string\", \"enum\": [\"Positive\", \"Negative\", \"Edge Case\"] },\n          \"priority\": { \"type\": \"string\", \"enum\": [\"High\", \"Medium\", \"Low\"] },\n          \"preconditions\": { \"type\": \"string\" },\n          \"steps\": { \"type\": \"string\" },\n          \"expectedResult\": { \"type\": \"string\" },\n          \"dataNeeded\": { \"type\": \"string\" }\n        },\n        \"required\": [\"id\", \"title\", \"type\", \"priority\", \"preconditions\", \"steps\", \"expectedResult\", \"dataNeeded\"]\n      }\n    }\n  },\n  \"required\": [\"decision\", \"reason\", \"testCases\"]\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [
+        832,
+        272
+      ],
+      "id": "618dde47-9eeb-4160-9d4f-a3e085a140a2",
+      "name": "Structured Output Parser"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Based on the test cases below, generate specific test data for each one that needs it.\n\nOriginal Story / Acceptance Criteria:\n{{ $('Format Jira Story Text').item.json.formattedStory }}\n\nTest Cases (JSON):\n{{ JSON.stringify($json.output.testCases) }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "You are a senior QA Analyst who generates concrete, realistic test data for a given set of test cases.\n\nFor EACH test case in the input list whose \"dataNeeded\" is not \"None\", generate the specific data values required to execute that test case's steps. Skip test cases where dataNeeded is \"None\" (do not include them in the output).\n\nFor each relevant field/input identified in a test case's dataNeeded and steps, generate THREE categories of values where applicable to that test case's type:\n- valid: a realistic value that should be accepted (only needed for Positive test cases, or when a Negative/Edge case still requires some valid baseline values alongside the invalid one)\n- invalid: a realistic value that should be rejected (needed for Negative test cases)\n- boundaryEdge: a boundary or edge value (e.g. minimum/maximum length, empty string, exact limit value, just-over-limit value) relevant to that specific test case\n\nOnly populate the categories that are actually relevant to that test case's type (e.g. a Positive test case about a successful login only needs \"valid\" data; a Negative test case about an invalid email format only needs \"invalid\" and maybe \"boundaryEdge\"; do not force all three categories if irrelevant). Use realistic, specific values (actual example emails, names, numbers, dates, codes) - never placeholders like \"some value\" or \"TBD\".\n\nFor EACH test case needing data, provide:\n- testCaseId: must match the id from the input test case (e.g. TC-01)\n- fields: an array of objects, each with:\n  - fieldName: the specific input/field this data is for (e.g. \"email\", \"promoCode\", \"password\")\n  - valid: array of valid example values (empty array if not applicable)\n  - invalid: array of invalid example values (empty array if not applicable)\n  - boundaryEdge: array of boundary/edge example values (empty array if not applicable)\n\nYou MUST always respond using the structured JSON output format provided to you. Never add any text outside that JSON structure."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        1040,
+        0
+      ],
+      "id": "cf8bb318-ee1f-4616-88ba-edec55658dc3",
+      "name": "AI Test Data Generator"
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"testData\": {\n      \"type\": \"array\",\n      \"items\": {\n        \"type\": \"object\",\n        \"properties\": {\n          \"testCaseId\": { \"type\": \"string\" },\n          \"fields\": {\n            \"type\": \"array\",\n            \"items\": {\n              \"type\": \"object\",\n              \"properties\": {\n                \"fieldName\": { \"type\": \"string\" },\n                \"valid\": { \"type\": \"array\", \"items\": { \"type\": \"string\" } },\n                \"invalid\": { \"type\": \"array\", \"items\": { \"type\": \"string\" } },\n                \"boundaryEdge\": { \"type\": \"array\", \"items\": { \"type\": \"string\" } }\n              },\n              \"required\": [\"fieldName\", \"valid\", \"invalid\", \"boundaryEdge\"]\n            }\n          }\n        },\n        \"required\": [\"testCaseId\", \"fields\"]\n      }\n    }\n  },\n  \"required\": [\"testData\"]\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [
+        1232,
+        272
+      ],
+      "id": "823898f8-d5d6-42cd-b0ea-d48fd82deeb6",
+      "name": "Structured Output Parser1"
+    },
+    {
+      "parameters": {
+        "jsCode": "const storyInfo = $('Format Jira Story Text').item.json;\nconst review = $('AI Test Case Generator').item.json.output;\nconst dataOut = $input.item.json.output;\n\nconst testCases = review.testCases || [];\nconst testData = dataOut.testData || [];\nconst dataByCaseId = {};\nfor (const td of testData) {\n  dataByCaseId[td.testCaseId] = td.fields;\n}\n\nlet md = `**Jira Issue:** ${storyInfo.issueKey} - ${storyInfo.summary}\\n\\n`;\n\nif (review.decision === 'Denied') {\n  md += `**Decision:** Denied\\n\\n**Reason:** ${review.reason}\\n\\nNo test cases or test data were generated. Please update the Jira story's acceptance criteria and retry.\\n`;\n} else {\n  md += `**Decision:** Approve\\n\\n## Test Cases\\n\\n`;\n  for (const tc of testCases) {\n    md += `### [${tc.id}] ${tc.title} (${tc.type} / ${tc.priority})\\n`;\n    md += `**Preconditions:** ${tc.preconditions}\\n\\n`;\n    md += `**Steps:** ${tc.steps}\\n\\n`;\n    md += `**Expected Result:** ${tc.expectedResult}\\n\\n`;\n    md += `**Data Needed:** ${tc.dataNeeded}\\n\\n`;\n\n    const fields = dataByCaseId[tc.id];\n    if (fields && fields.length > 0) {\n      md += `**Test Data:**\\n`;\n      for (const f of fields) {\n        if (f.valid && f.valid.length) md += `- ${f.fieldName} (valid): ${f.valid.join(', ')}\\n`;\n        if (f.invalid && f.invalid.length) md += `- ${f.fieldName} (invalid): ${f.invalid.join(', ')}\\n`;\n        if (f.boundaryEdge && f.boundaryEdge.length) md += `- ${f.fieldName} (boundary/edge): ${f.boundaryEdge.join(', ')}\\n`;\n      }\n    }\n    md += `\\n`;\n  }\n}\n\nreturn [{\n  json: {\n    output: md,\n    issueKey: storyInfo.issueKey,\n    decision: review.decision,\n    reason: review.reason,\n    testCases,\n    testData\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        0
+      ],
+      "id": "3701b990-68d0-46c8-93c2-b1d679f5e2a5",
+      "name": "Combine Final Output"
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-3.1-flash-lite",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1.2,
+      "position": [
+        496,
+        208
+      ],
+      "id": "bc508ac1-6c7d-499b-bb54-ba6df0122c56",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "7ZV2lM8NAVqObDgh",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-3.1-flash-lite",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1.2,
+      "position": [
+        1040,
+        224
+      ],
+      "id": "dcbe5bde-4de6-4eb4-9742-908f64908fa1",
+      "name": "Google Gemini Chat Model1",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "7ZV2lM8NAVqObDgh",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When chat message received": {
+      "main": [
+        [
+          {
+            "node": "Get Jira Story",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Jira Story": {
+      "main": [
+        [
+          {
+            "node": "Format Jira Story Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Jira Story Text": {
+      "main": [
+        [
+          {
+            "node": "AI Test Case Generator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Test Case Generator": {
+      "main": [
+        [
+          {
+            "node": "AI Test Data Generator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "AI Test Case Generator",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Test Data Generator": {
+      "main": [
+        [
+          {
+            "node": "Combine Final Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser1": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "AI Test Data Generator",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Test Case Generator",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Test Data Generator",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true
+  },
+  "versionId": "d2771005-0e82-4a4a-a901-ab5c0fd47245",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "d4fd626aac667aafe8853a30557889c2711020a336e42d081a06267d32694745"
+  },
+  "nodeGroups": [],
+  "id": "3Mbt1D5437gFfk6P",
+  "tags": []
+}

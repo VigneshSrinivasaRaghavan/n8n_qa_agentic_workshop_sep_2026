@@ -1,0 +1,409 @@
+{
+  "name": "9.3_jira_bug_creation_agent_human_approved",
+  "nodes": [
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        -1616,
+        128
+      ],
+      "id": "e495aa98-41ca-478d-802b-fe477dd91357",
+      "name": "When chat message received",
+      "webhookId": "b1c2d3e4-2001-4a00-8000-000000000101"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse the chat message to extract the related Jira story key and the raw bug description.\n// Expected format: \"KAN-1: promo code field does not trim leading spaces...\"\n// Falls back gracefully if no key is found.\nconst input = $json.chatInput || '';\n\nconst keyMatch = input.match(/\\b([A-Z][A-Z0-9]+-\\d+)\\b/);\nconst storyKey = keyMatch ? keyMatch[1] : null;\nconst projectKey = storyKey ? storyKey.split('-')[0] : null;\n\nlet rawBugDescription = input;\nif (keyMatch) {\n  rawBugDescription = input.replace(keyMatch[0], '').replace(/^[:\\-\\s]+/, '').trim();\n}\n\nreturn [{\n  json: {\n    storyKey,\n    projectKey,\n    rawBugDescription\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1408,
+        128
+      ],
+      "id": "554d0ffc-56f6-4a09-810f-99a91bb523b6",
+      "name": "Parse Story Key & Bug Text"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "issueKey": "={{ $json.storyKey }}",
+        "simplifyOutput": true,
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.jira",
+      "typeVersion": 1,
+      "position": [
+        -1200,
+        128
+      ],
+      "id": "248fa4e4-d52a-437d-aa88-cca4958354fd",
+      "name": "Get Related Story",
+      "credentials": {
+        "jiraSoftwareCloudApi": {
+          "id": "j4mAJaEzAaEsHVVO",
+          "name": "Jira SW Cloud account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Turn the following raw bug observation into a structured bug report.\n\nRelated Jira Story: {{ $('Parse Story Key & Bug Text').item.json.storyKey || 'Not specified' }}\nStory Summary: {{ $json.Summary || $json.summary || 'N/A' }}\nStory Description/AC:\n{{ $json.Description || $json.description || 'N/A' }}\n\nRaw Bug Observation (as reported by the tester):\n{{ $('Parse Story Key & Bug Text').item.json.rawBugDescription }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "You are a senior QA Analyst who converts a tester's raw, informal bug observation into a clear, well-structured bug report ready to post into Jira.\n\nUsing the raw bug observation (and the related story's context if provided), produce:\n\n- title: a short, specific bug title (e.g. \"Promo code input does not trim leading whitespace, causing valid codes to be rejected\") - never vague titles like \"Bug in promo code\".\n- stepsToReproduce: numbered steps as a single string (e.g. \"1. ... 2. ... 3. ...\") reconstructing the exact steps implied by the tester's observation. If the tester did not provide enough detail for certain steps, write the most reasonable reconstruction based on context and note any assumption briefly in the step itself.\n- expectedResult: what should have happened, based on the related story's acceptance criteria if available, or standard reasonable behavior if not.\n- actualResult: what actually happened, as described by the tester.\n- severity: one of \"Critical\" (system crash, data loss, security issue, complete blocker of core function), \"High\" (major functionality broken, no workaround), \"Medium\" (functionality impaired but workaround exists), \"Low\" (minor/cosmetic issue). Choose based on the real impact described, not just alarmist wording.\n- severityJustification: one sentence explaining why this severity was chosen.\n\nDo not invent bug details that contradict what the tester actually reported. If critical information is missing (e.g. no indication of which environment, browser, or exact input used), note that explicitly as an \"Additional Info Needed\" sentence appended at the end of stepsToReproduce, but still produce your best structured report rather than refusing.\n\nYou MUST always respond using the structured JSON output format provided to you. Never add any text outside that JSON structure."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        -976,
+        128
+      ],
+      "id": "a18bb1f8-d454-49d6-9b4a-25fe72a53c99",
+      "name": "Smart Bug Report Agent"
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-3.1-flash-lite",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1.2,
+      "position": [
+        -976,
+        384
+      ],
+      "id": "9592fb97-71c7-4ba0-afd1-024d1689cbac",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "7ZV2lM8NAVqObDgh",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"title\": { \"type\": \"string\" },\n    \"stepsToReproduce\": { \"type\": \"string\" },\n    \"expectedResult\": { \"type\": \"string\" },\n    \"actualResult\": { \"type\": \"string\" },\n    \"severity\": { \"type\": \"string\", \"enum\": [\"Critical\", \"High\", \"Medium\", \"Low\"] },\n    \"severityJustification\": { \"type\": \"string\" }\n  },\n  \"required\": [\"title\", \"stepsToReproduce\", \"expectedResult\", \"actualResult\", \"severity\", \"severityJustification\"]\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [
+        -800,
+        384
+      ],
+      "id": "ff46cf22-03df-474d-9de8-e5ca7dc593e4",
+      "name": "Structured Output Parser"
+    },
+    {
+      "parameters": {
+        "jsCode": "const bug = $input.item.json.output;\nconst storyKey = $('Parse Story Key & Bug Text').item.json.storyKey;\n\nlet description = `*Steps to Reproduce:*\\n${bug.stepsToReproduce}\\n\\n`;\ndescription += `*Expected Result:*\\n${bug.expectedResult}\\n\\n`;\ndescription += `*Actual Result:*\\n${bug.actualResult}\\n\\n`;\ndescription += `*Severity:* ${bug.severity} - ${bug.severityJustification}\\n\\n`;\nif (storyKey) {\n  description += `*Related Story:* ${storyKey}\\n`;\n}\ndescription += `\\n_This bug report was drafted by the Smart Bug Report Agent and reviewed by a human before creation._`;\n\nreturn [{\n  json: {\n    title: bug.title,\n    description,\n    stepsToReproduce: bug.stepsToReproduce,\n    expectedResult: bug.expectedResult,\n    actualResult: bug.actualResult,\n    severity: bug.severity,\n    severityJustification: bug.severityJustification,\n    storyKey\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -608,
+        128
+      ],
+      "id": "2e4b636f-f8ba-4ecc-bfcb-f451aeeacb74",
+      "name": "Prepare Jira Payload"
+    },
+    {
+      "parameters": {
+        "resume": "form",
+        "formTitle": "Review Drafted Bug Report Before Creating in Jira",
+        "formDescription": "=",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Bug Title",
+              "defaultValue": "={{ $json.title }}"
+            },
+            {
+              "fieldLabel": "Related Story"
+            },
+            {
+              "fieldLabel": "Severity",
+              "defaultValue": "={{ $json.severity }}"
+            },
+            {
+              "fieldLabel": "Steps to Reproduce",
+              "fieldType": "textarea",
+              "defaultValue": "={{ $json.stepsToReproduce }}"
+            },
+            {
+              "fieldLabel": "Expected Result",
+              "fieldType": "textarea",
+              "defaultValue": "={{ $json.expectedResult }}"
+            },
+            {
+              "fieldLabel": "Actual Result",
+              "fieldType": "textarea",
+              "defaultValue": "={{ $json.actualResult }}"
+            },
+            {
+              "fieldLabel": "Decision",
+              "fieldType": "dropdown",
+              "defaultValue": "Approved",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "Approved"
+                  },
+                  {
+                    "option": "Rejected"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        -400,
+        128
+      ],
+      "id": "8dba5ac1-c5c2-45d5-9387-df3c6f29301f",
+      "name": "Wait for Human Approval",
+      "webhookId": "b1c2d3e4-2008-4a00-8000-000000000201"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "b1c2d3e4-2009-4a00-8000-000000000210",
+              "leftValue": "={{ $json.Decision }}",
+              "rightValue": "Approved",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -208,
+        128
+      ],
+      "id": "2fd21a44-1cf0-449b-af7b-a5a18c6bc6a2",
+      "name": "Approved?"
+    },
+    {
+      "parameters": {
+        "project": {
+          "__rl": true,
+          "value": "10001",
+          "mode": "list",
+          "cachedResultName": "Demo Project"
+        },
+        "issueType": {
+          "__rl": true,
+          "value": "10012",
+          "mode": "list",
+          "cachedResultName": "Bug"
+        },
+        "summary": "={{ $('Prepare Jira Payload').item.json.title }}",
+        "additionalFields": {
+          "description": "={{ $('Prepare Jira Payload').item.json.description }}"
+        }
+      },
+      "type": "n8n-nodes-base.jira",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "80a7cb65-fffb-4f9b-9f48-f0ab1fa7cf95",
+      "name": "Create Jira Bug",
+      "credentials": {
+        "jiraSoftwareCloudApi": {
+          "id": "j4mAJaEzAaEsHVVO",
+          "name": "Jira SW Cloud account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const created = $input.item.json;\nconst payload = $('Prepare Jira Payload').item.json;\n\nconst bugKey = created.key || created.id || 'UNKNOWN';\n\nlet md = `**Decision:** Approved\\n\\n**New Bug Created:** ${bugKey}\\n\\n`;\nmd += `**Title:** ${payload.title}\\n\\n`;\nmd += `**Severity:** ${payload.severity}\\n\\n`;\nif (payload.storyKey) {\n  md += `**Related Story:** ${payload.storyKey}\\n\\n`;\n}\nmd += `${payload.description}`;\n\nreturn [{\n  json: {\n    output: md,\n    decision: 'Approved',\n    bugKey,\n    storyKey: payload.storyKey\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        208,
+        0
+      ],
+      "id": "6d5feccf-fd1e-4268-ae34-3f81f87cf74a",
+      "name": "Combine Final Output (Approved)"
+    },
+    {
+      "parameters": {
+        "jsCode": "const payload = $('Prepare Jira Payload').item.json;\n\nlet md = `**Decision:** Rejected\\n\\n`;\nmd += `The drafted bug report for \"${payload.title}\" was rejected during human review. No issue was created in Jira.\\n\\n`;\nmd += `**Drafted Title:** ${payload.title}\\n\\n`;\nmd += `**Drafted Severity:** ${payload.severity}\\n\\n`;\nif (payload.storyKey) {\n  md += `**Related Story:** ${payload.storyKey}\\n\\n`;\n}\nmd += `_To create this bug, re-run the workflow with a corrected or more detailed bug description._`;\n\nreturn [{\n  json: {\n    output: md,\n    decision: 'Rejected',\n    storyKey: payload.storyKey\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        0,
+        240
+      ],
+      "id": "9662ec41-da2c-47f8-b932-0c8620226e1c",
+      "name": "Combine Final Output (Rejected)"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When chat message received": {
+      "main": [
+        [
+          {
+            "node": "Parse Story Key & Bug Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Story Key & Bug Text": {
+      "main": [
+        [
+          {
+            "node": "Get Related Story",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Related Story": {
+      "main": [
+        [
+          {
+            "node": "Smart Bug Report Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Smart Bug Report Agent": {
+      "main": [
+        [
+          {
+            "node": "Prepare Jira Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Smart Bug Report Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Smart Bug Report Agent",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Jira Payload": {
+      "main": [
+        [
+          {
+            "node": "Wait for Human Approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait for Human Approval": {
+      "main": [
+        [
+          {
+            "node": "Approved?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Approved?": {
+      "main": [
+        [
+          {
+            "node": "Create Jira Bug",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Combine Final Output (Rejected)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Jira Bug": {
+      "main": [
+        [
+          {
+            "node": "Combine Final Output (Approved)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true
+  },
+  "versionId": "e0af9945-23dd-443f-b488-3487b8b11a79",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "d4fd626aac667aafe8853a30557889c2711020a336e42d081a06267d32694745"
+  },
+  "nodeGroups": [],
+  "id": "qE8Kf6FswH4ulxLg",
+  "tags": []
+}

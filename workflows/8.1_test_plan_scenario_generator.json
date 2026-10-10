@@ -1,0 +1,205 @@
+{
+  "name": "8.1_test_plan_scenario_generator",
+  "nodes": [
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.4,
+      "position": [0, 0],
+      "id": "b1c2d3e4-0001-4a00-8000-000000000001",
+      "name": "When chat message received",
+      "webhookId": "b1c2d3e4-0001-4a00-8000-000000000101"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Create a lightweight, story-level test plan for the following Jira user story and its Acceptance Criteria.\n\nJira Story / Acceptance Criteria:\n{{ $json.chatInput }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "You are a senior QA Lead creating a lightweight, story-level test plan from a Jira user story and its Acceptance Criteria (AC). This is NOT a release-level formal plan - keep it scoped to this single story, practical and concise.\n\nProduce the following sections:\n\n1. scope.inScope: bullet list of what will be tested, derived directly from the AC.\n2. scope.outOfScope: bullet list of what will NOT be tested (e.g. things explicitly outside this story, unrelated integrations, performance/load testing if not implied, UI pixel-perfect checks unless stated).\n3. testApproach: an array of objects, each with a \"type\" (choose only from \"Functional\", \"Negative\", \"Edge Case\", \"Non-functional\") and a \"description\" of what that type of testing will cover for this specific story. Only include \"Non-functional\" if the AC or story genuinely implies a non-functional concern (performance, security, accessibility, concurrency); do not force it if irrelevant.\n4. risks: an array of objects with \"risk\" and \"mitigation\" - realistic testing risks for this story (e.g. unclear AC, dependency on external system/API, limited test data, environment instability) each with a practical mitigation.\n5. entryCriteria: bullet list of conditions that must be true before testing starts (e.g. AC reviewed and approved, build deployed to test environment, test data available).\n6. exitCriteria: bullet list of conditions that define testing is complete (e.g. all planned scenarios executed, no open High severity defects, critical scenarios passed).\n7. environmentAndData.environment: the test environment(s)/configuration needed (e.g. staging, specific browser/device/OS combinations) inferred from the story context.\n8. environmentAndData.testData: bullet list of specific test data needed (e.g. test user accounts with specific roles, sample valid/invalid/expired inputs relevant to this story).\n\nBase every section on the actual content of the story and AC - do not output generic boilerplate that could apply to any story. If the AC is too vague to determine a section confidently, state that explicitly in that section rather than guessing.\n\nYou MUST always respond using the structured JSON output format provided to you. Never add any text outside that JSON structure."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [240, 0],
+      "id": "b1c2d3e4-0002-4a00-8000-000000000002",
+      "name": "Test Plan Agent"
+    },
+    {
+      "parameters": {
+        "model": "openai/gpt-oss-safeguard-20b",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [240, 260],
+      "id": "b1c2d3e4-0003-4a00-8000-000000000003",
+      "name": "Groq Chat Model",
+      "credentials": {
+        "groqApi": {
+          "id": "PTObdGFoUkM2Jx51",
+          "name": "Groq account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"scope\": {\n      \"type\": \"object\",\n      \"properties\": {\n        \"inScope\": { \"type\": \"array\", \"items\": { \"type\": \"string\" } },\n        \"outOfScope\": { \"type\": \"array\", \"items\": { \"type\": \"string\" } }\n      },\n      \"required\": [\"inScope\", \"outOfScope\"]\n    },\n    \"testApproach\": {\n      \"type\": \"array\",\n      \"items\": {\n        \"type\": \"object\",\n        \"properties\": {\n          \"type\": { \"type\": \"string\", \"enum\": [\"Functional\", \"Negative\", \"Edge Case\", \"Non-functional\"] },\n          \"description\": { \"type\": \"string\" }\n        },\n        \"required\": [\"type\", \"description\"]\n      }\n    },\n    \"risks\": {\n      \"type\": \"array\",\n      \"items\": {\n        \"type\": \"object\",\n        \"properties\": {\n          \"risk\": { \"type\": \"string\" },\n          \"mitigation\": { \"type\": \"string\" }\n        },\n        \"required\": [\"risk\", \"mitigation\"]\n      }\n    },\n    \"entryCriteria\": { \"type\": \"array\", \"items\": { \"type\": \"string\" } },\n    \"exitCriteria\": { \"type\": \"array\", \"items\": { \"type\": \"string\" } },\n    \"environmentAndData\": {\n      \"type\": \"object\",\n      \"properties\": {\n        \"environment\": { \"type\": \"string\" },\n        \"testData\": { \"type\": \"array\", \"items\": { \"type\": \"string\" } }\n      },\n      \"required\": [\"environment\", \"testData\"]\n    }\n  },\n  \"required\": [\"scope\", \"testApproach\", \"risks\", \"entryCriteria\", \"exitCriteria\", \"environmentAndData\"]\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [420, 260],
+      "id": "b1c2d3e4-0004-4a00-8000-000000000004",
+      "name": "Structured Output Parser"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Based on the test plan below, generate detailed test scenarios for the same Jira story.\n\nOriginal Story / Acceptance Criteria:\n{{ $('When chat message received').item.json.chatInput }}\n\nTest Plan - Scope (In Scope):\n{{ JSON.stringify($json.output.scope.inScope) }}\n\nTest Plan - Test Approach:\n{{ JSON.stringify($json.output.testApproach) }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "You are a senior QA Analyst who converts a test plan's scope and test approach into concrete test scenarios for a Jira story.\n\nFor each \"type\" listed in the Test Approach (Functional, Negative, Edge Case, and/or Non-functional - only the ones actually present), generate one or more test scenarios that fall under it. A test scenario is a ONE-LINE description of WHAT to test (the condition/situation to verify), NOT a step-by-step test case - do not write test steps or expected results here, that belongs to a separate test case generation step later.\n\nGenerate a reasonable number of scenarios based on the complexity of the story (typically 6 to 12, do not force an exact count). Do not invent scenarios unrelated to the story's AC or test approach.\n\nFor EACH scenario provide:\n- id: sequential like TS-01, TS-02, ...\n- title: a concise one-line scenario description (e.g. \"Verify discount is applied when a valid promo code is entered\")\n- category: exactly one of \"Functional\", \"Negative\", \"Edge Case\", \"Non-functional\" (must match a type present in the Test Approach)\n- priority: \"High\", \"Medium\", or \"Low\" based on business impact and risk\n- relatedAC: the specific AC line/number or behavior this scenario verifies\n\nYou MUST always respond using the structured JSON output format provided to you. Never add any text outside that JSON structure."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [660, 0],
+      "id": "b1c2d3e4-0005-4a00-8000-000000000005",
+      "name": "Test Scenario Generator"
+    },
+    {
+      "parameters": {
+        "model": "openai/gpt-oss-safeguard-20b",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [660, 260],
+      "id": "b1c2d3e4-0006-4a00-8000-000000000006",
+      "name": "Groq Chat Model1",
+      "credentials": {
+        "groqApi": {
+          "id": "PTObdGFoUkM2Jx51",
+          "name": "Groq account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"scenarios\": {\n      \"type\": \"array\",\n      \"items\": {\n        \"type\": \"object\",\n        \"properties\": {\n          \"id\": { \"type\": \"string\" },\n          \"title\": { \"type\": \"string\" },\n          \"category\": { \"type\": \"string\", \"enum\": [\"Functional\", \"Negative\", \"Edge Case\", \"Non-functional\"] },\n          \"priority\": { \"type\": \"string\", \"enum\": [\"High\", \"Medium\", \"Low\"] },\n          \"relatedAC\": { \"type\": \"string\" }\n        },\n        \"required\": [\"id\", \"title\", \"category\", \"priority\", \"relatedAC\"]\n      }\n    }\n  },\n  \"required\": [\"scenarios\"]\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [840, 260],
+      "id": "b1c2d3e4-0007-4a00-8000-000000000007",
+      "name": "Structured Output Parser1"
+    },
+    {
+      "parameters": {
+        "jsCode": "const plan = $('Test Plan Agent').item.json.output;\nconst scenarioOut = $input.item.json.output;\nconst scenarios = scenarioOut.scenarios || [];\n\nlet md = `## Test Plan\\n\\n`;\nmd += `**In Scope:**\\n` + (plan.scope.inScope || []).map(s => `- ${s}`).join('\\n') + `\\n\\n`;\nmd += `**Out of Scope:**\\n` + (plan.scope.outOfScope || []).map(s => `- ${s}`).join('\\n') + `\\n\\n`;\nmd += `**Test Approach:**\\n` + (plan.testApproach || []).map(a => `- ${a.type}: ${a.description}`).join('\\n') + `\\n\\n`;\nmd += `**Risks & Mitigations:**\\n` + (plan.risks || []).map(r => `- Risk: ${r.risk} | Mitigation: ${r.mitigation}`).join('\\n') + `\\n\\n`;\nmd += `**Entry Criteria:**\\n` + (plan.entryCriteria || []).map(s => `- ${s}`).join('\\n') + `\\n\\n`;\nmd += `**Exit Criteria:**\\n` + (plan.exitCriteria || []).map(s => `- ${s}`).join('\\n') + `\\n\\n`;\nmd += `**Environment:** ${plan.environmentAndData.environment}\\n`;\nmd += `**Test Data Needed:**\\n` + (plan.environmentAndData.testData || []).map(s => `- ${s}`).join('\\n') + `\\n\\n`;\n\nmd += `## Test Scenarios\\n\\n`;\nfor (const s of scenarios) {\n  md += `- [${s.id}] (${s.category} / ${s.priority}) ${s.title} -- ref: ${s.relatedAC}\\n`;\n}\n\nreturn [{\n  json: {\n    output: md,\n    testPlan: plan,\n    scenarios\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1040, 0],
+      "id": "b1c2d3e4-0008-4a00-8000-000000000008",
+      "name": "Combine Final Output"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When chat message received": {
+      "main": [
+        [
+          {
+            "node": "Test Plan Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Test Plan Agent": {
+      "main": [
+        [
+          {
+            "node": "Test Scenario Generator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Test Plan Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Test Plan Agent",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Test Scenario Generator": {
+      "main": [
+        [
+          {
+            "node": "Combine Final Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Test Scenario Generator",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser1": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Test Scenario Generator",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "b1c2d3e4-f5a6-4700-8900-000000000001",
+  "meta": {
+    "instanceId": "d4fd626aac667aafe8853a30557889c2711020a336e42d081a06267d32694745"
+  },
+  "nodeGroups": [],
+  "id": "B1C2D3E4TestPlanScen1",
+  "tags": []
+}
