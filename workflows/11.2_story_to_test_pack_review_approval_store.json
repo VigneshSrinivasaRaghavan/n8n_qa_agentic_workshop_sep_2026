@@ -1,0 +1,692 @@
+{
+  "name": "11.2_story_to_test_pack_review_approval_store",
+  "nodes": [
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        32,
+        704
+      ],
+      "id": "c81737ca-04f6-4be4-b23c-7d1e820cd1ea",
+      "name": "When chat message received",
+      "webhookId": "w2-loop-trigger-0001"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "issueKey": "={{ $json.chatInput.trim() }}",
+        "simplifyOutput": true,
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.jira",
+      "typeVersion": 1,
+      "position": [
+        256,
+        704
+      ],
+      "id": "24da368e-3291-4cee-ba3d-d44d9c6dea72",
+      "name": "Get Jira Story",
+      "credentials": {
+        "jiraSoftwareCloudApi": {
+          "id": "j4mAJaEzAaEsHVVO",
+          "name": "Jira SW Cloud account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract issue key, summary, and description text.\n// Handles: simplifyOutput=true shape, raw Jira shape, and ADF description.\nconst issue = $input.item.json;\n\nconst issueKey = issue.key || issue.id || 'UNKNOWN';\nconst summary = issue.Summary ?? issue.fields?.summary ?? issue.summary ?? '';\n\nlet rawDescription;\nif (issue.Description !== undefined) {\n  rawDescription = issue.Description;\n} else if (issue.fields?.description !== undefined) {\n  rawDescription = issue.fields.description;\n} else {\n  rawDescription = issue.description;\n}\n\nfunction adfToText(node) {\n  if (!node) return '';\n  if (typeof node === 'string') return node;\n  let text = '';\n  if (node.type === 'text' && node.text) {\n    text += node.text;\n  }\n  if (Array.isArray(node.content)) {\n    for (const child of node.content) {\n      text += adfToText(child);\n      if (child.type === 'paragraph' || child.type === 'listItem' || child.type === 'heading') {\n        text += '\\n';\n      }\n    }\n  }\n  return text;\n}\n\nlet descriptionText = '';\nif (!rawDescription) {\n  descriptionText = '(No description provided)';\n} else if (typeof rawDescription === 'string') {\n  descriptionText = rawDescription;\n} else if (typeof rawDescription === 'object') {\n  descriptionText = adfToText(rawDescription).trim();\n  if (!descriptionText) {\n    descriptionText = '(Description present but could not be parsed from ADF format)';\n  }\n}\n\nconst formattedStory = `Story: ${issueKey} - ${summary}\\n\\n${descriptionText}`;\n\nreturn [{\n  json: {\n    issueKey,\n    summary,\n    formattedStory\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        704
+      ],
+      "id": "c714c54e-3ef3-4feb-a826-698d2dc7a088",
+      "name": "Format Jira Story Text"
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-3.1-flash-lite",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1.2,
+      "position": [
+        712,
+        920
+      ],
+      "id": "85c19762-5a47-43f6-8fff-efc92936b95c",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "7ZV2lM8NAVqObDgh",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"decision\": {\n      \"type\": \"string\",\n      \"enum\": [\n        \"Approve\",\n        \"Denied\"\n      ]\n    },\n    \"reason\": {\n      \"type\": \"string\"\n    },\n    \"testCases\": {\n      \"type\": \"array\",\n      \"items\": {\n        \"type\": \"object\",\n        \"properties\": {\n          \"id\": {\n            \"type\": \"string\"\n          },\n          \"title\": {\n            \"type\": \"string\"\n          },\n          \"type\": {\n            \"type\": \"string\",\n            \"enum\": [\n              \"Positive\",\n              \"Negative\",\n              \"Edge Case\"\n            ]\n          },\n          \"priority\": {\n            \"type\": \"string\",\n            \"enum\": [\n              \"High\",\n              \"Medium\",\n              \"Low\"\n            ]\n          },\n          \"preconditions\": {\n            \"type\": \"string\"\n          },\n          \"steps\": {\n            \"type\": \"string\"\n          },\n          \"expectedResult\": {\n            \"type\": \"string\"\n          },\n          \"dataNeeded\": {\n            \"type\": \"string\"\n          }\n        },\n        \"required\": [\n          \"id\",\n          \"title\",\n          \"type\",\n          \"priority\",\n          \"preconditions\",\n          \"steps\",\n          \"expectedResult\",\n          \"dataNeeded\"\n        ]\n      }\n    }\n  },\n  \"required\": [\n    \"decision\",\n    \"reason\",\n    \"testCases\"\n  ]\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [
+        840,
+        920
+      ],
+      "id": "632574df-62bc-4e34-8763-79bfc0c80ea2",
+      "name": "Test Case Output Parser"
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"testData\": {\n      \"type\": \"array\",\n      \"items\": {\n        \"type\": \"object\",\n        \"properties\": {\n          \"testCaseId\": {\n            \"type\": \"string\"\n          },\n          \"fields\": {\n            \"type\": \"array\",\n            \"items\": {\n              \"type\": \"object\",\n              \"properties\": {\n                \"fieldName\": {\n                  \"type\": \"string\"\n                },\n                \"valid\": {\n                  \"type\": \"array\",\n                  \"items\": {\n                    \"type\": \"string\"\n                  }\n                },\n                \"invalid\": {\n                  \"type\": \"array\",\n                  \"items\": {\n                    \"type\": \"string\"\n                  }\n                },\n                \"boundaryEdge\": {\n                  \"type\": \"array\",\n                  \"items\": {\n                    \"type\": \"string\"\n                  }\n                }\n              },\n              \"required\": [\n                \"fieldName\",\n                \"valid\",\n                \"invalid\",\n                \"boundaryEdge\"\n              ]\n            }\n          }\n        },\n        \"required\": [\n          \"testCaseId\",\n          \"fields\"\n        ]\n      }\n    }\n  },\n  \"required\": [\n    \"testData\"\n  ]\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [
+        1128,
+        808
+      ],
+      "id": "29c0fd87-7a7a-4ea0-a55f-d5d848c36da3",
+      "name": "Test Data Output Parser"
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"overallVerdict\": {\n      \"type\": \"string\",\n      \"enum\": [\n        \"Approved\",\n        \"Needs Revision\"\n      ]\n    },\n    \"summary\": {\n      \"type\": \"string\"\n    },\n    \"issues\": {\n      \"type\": \"array\",\n      \"items\": {\n        \"type\": \"object\",\n        \"properties\": {\n          \"id\": {\n            \"type\": \"string\"\n          },\n          \"relatedTestCaseId\": {\n            \"type\": \"string\"\n          },\n          \"dimension\": {\n            \"type\": \"string\",\n            \"enum\": [\n              \"Coverage\",\n              \"Clarity\",\n              \"Correctness\",\n              \"Structure/Format\",\n              \"Duplication\"\n            ]\n          },\n          \"severity\": {\n            \"type\": \"string\",\n            \"enum\": [\n              \"High\",\n              \"Medium\",\n              \"Low\"\n            ]\n          },\n          \"comment\": {\n            \"type\": \"string\"\n          }\n        },\n        \"required\": [\n          \"id\",\n          \"relatedTestCaseId\",\n          \"dimension\",\n          \"severity\",\n          \"comment\"\n        ]\n      }\n    }\n  },\n  \"required\": [\n    \"overallVerdict\",\n    \"summary\",\n    \"issues\"\n  ]\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [
+        1704,
+        808
+      ],
+      "id": "89e89b9a-6ccc-419f-9b86-3005e8f5d6cb",
+      "name": "Review Output Parser"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Analyze the following User Story and its Acceptance Criteria, then produce the Test Pack's test cases (Scenarios).\n\n{{ $json.isRevision ? ('REVISION MODE: The previous Test Pack was rejected. Revise the previous test cases to directly address the feedback below - keep every test case the feedback does not mention, and change only what it asks you to change.\\n\\nPrevious Test Cases (JSON):\\n' + JSON.stringify($json.previousTestCases) + '\\n\\nHuman Reviewer / Automated Review Feedback:\\n' + $json.revisionComments + '\\n\\n') : '' }}User Story:\n{{ $('Format Jira Story Text').item.json.formattedStory }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "You are a senior QA Analyst that writes functional test cases from a user story and its acceptance criteria.\n\nYou operate in one of two modes:\n\nMODE 1 - FRESH DRAFT: You receive a user story with no previous draft. First internally review it against these quality checks:\n1. Is there a clear user story statement (As a / I want / So that, or equivalent intent)?\n2. Are there acceptance criteria or enough behavioral detail to know what \"done\" and \"correct\" look like?\n3. Is there enough detail to identify at least positive, negative, and edge case scenarios?\nIf clear enough, set decision to \"Approve\" and generate test cases. If too vague/ambiguous, set decision to \"Denied\", return an empty testCases array, and explain the SPECIFIC missing details in reason.\n\nMODE 2 - REVISION: The input will contain \"Previous Test Cases\" and \"Human Reviewer Feedback\". A human (and/or the automated Review Agent) rejected the previous Test Pack and gave specific feedback. You MUST revise the previous test cases to directly address that feedback - keep every test case the feedback does not mention, and change only what the feedback asks you to change. Always set decision to \"Approve\" in revision mode unless the feedback itself says the story is fundamentally untestable.\n\nIn either mode, when decision is \"Approve\", generate a reasonable number of test cases based on complexity (typically 4-8, do not force an exact count). Cover positive, negative, and edge cases where relevant. For EACH test case provide:\n- id: sequential like TC-01, TC-02, ...\n- title: short descriptive title\n- type: one of \"Positive\", \"Negative\", \"Edge Case\"\n- priority: one of \"High\", \"Medium\", \"Low\"\n- preconditions: what must be true before running the test\n- steps: numbered steps as a single string (e.g. \"1. ... 2. ... 3. ...\"). Where a step requires specific input data, phrase it generically (e.g. \"Enter a promo code that has expired\") rather than inventing a literal value - exact data values are generated separately.\n- expectedResult: the expected outcome\n- dataNeeded: a short comma-separated string of what input data this test case needs (or \"None\")\n\nYou MUST always respond using the structured JSON output format provided to you. Never add any text outside that JSON structure."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        704,
+        704
+      ],
+      "id": "1d565b83-1902-4797-a3b6-f123df9697a3",
+      "name": "AI Test Case Generator"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Based on the test cases below, generate specific test data for each one that needs it.\n\nOriginal Story / Acceptance Criteria:\n{{ $('Format Jira Story Text').item.json.formattedStory }}\n\nTest Cases (JSON):\n{{ JSON.stringify($json.output.testCases) }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "You are a senior QA Analyst who generates concrete, realistic test data for a given set of test cases.\n\nFor EACH test case whose \"dataNeeded\" is not \"None\", generate the specific data values required to execute that test case's steps. Skip test cases where dataNeeded is \"None\".\n\nFor each relevant field, generate THREE categories where applicable:\n- valid: a realistic value that should be accepted\n- invalid: a realistic value that should be rejected\n- boundaryEdge: a boundary/edge value (min/max length, empty string, exact limit, just-over-limit)\n\nOnly populate categories relevant to that test case's type. Use realistic, specific values (real-looking emails, names, numbers, dates, codes) - never placeholders like \"some value\" or \"TBD\".\n\nFor EACH test case needing data, provide:\n- testCaseId: must match the id from the input (e.g. TC-01)\n- fields: array of { fieldName, valid[], invalid[], boundaryEdge[] }\n\nYou MUST always respond using the structured JSON output format provided to you. Never add any text outside that JSON structure."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        1056,
+        576
+      ],
+      "id": "89d39510-2422-4a08-9007-ffdbd7e8678a",
+      "name": "AI Test Data Generator"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Merge test cases + test data into one Test Pack, and compute the current revision count.\nconst storyInfo = $('Format Jira Story Text').item.json;\nconst tcOut = $('AI Test Case Generator').item.json.output;\nconst dataOut = $input.item.json.output;\n\nlet revisionCount = 0;\ntry {\n  const prevCtx = $('Prepare Revision Context').first();\n  if (prevCtx && prevCtx.json && typeof prevCtx.json.revisionCount === 'number') {\n    revisionCount = prevCtx.json.revisionCount;\n  }\n} catch (e) {\n  revisionCount = 0;\n}\nconst maxRevisions = 3;\n\nconst testCases = tcOut.testCases || [];\nconst testData = dataOut.testData || [];\nconst dataByCaseId = {};\nfor (const td of testData) {\n  dataByCaseId[td.testCaseId] = td.fields;\n}\n\nlet md = `Jira Issue: ${storyInfo.issueKey} - ${storyInfo.summary}\\n\\n`;\n\nif (tcOut.decision === 'Denied') {\n  md += `Decision: Denied\\nReason: ${tcOut.reason}\\n`;\n} else {\n  for (const tc of testCases) {\n    md += `[${tc.id}] ${tc.title} (${tc.type} / ${tc.priority})\\n`;\n    md += `Preconditions: ${tc.preconditions}\\n`;\n    md += `Steps: ${tc.steps}\\n`;\n    md += `Expected Result: ${tc.expectedResult}\\n`;\n    md += `Data Needed: ${tc.dataNeeded}\\n`;\n    const fields = dataByCaseId[tc.id];\n    if (fields && fields.length > 0) {\n      for (const f of fields) {\n        if (f.valid && f.valid.length) md += `  - ${f.fieldName} (valid): ${f.valid.join(', ')}\\n`;\n        if (f.invalid && f.invalid.length) md += `  - ${f.fieldName} (invalid): ${f.invalid.join(', ')}\\n`;\n        if (f.boundaryEdge && f.boundaryEdge.length) md += `  - ${f.fieldName} (boundary/edge): ${f.boundaryEdge.join(', ')}\\n`;\n      }\n    }\n    md += `\\n`;\n  }\n}\n\nreturn [{\n  json: {\n    issueKey: storyInfo.issueKey,\n    summary: storyInfo.summary,\n    decision: tcOut.decision,\n    reason: tcOut.reason,\n    testCases,\n    testData,\n    testPackText: md,\n    revisionCount,\n    maxRevisions\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1408,
+        576
+      ],
+      "id": "9c72d5ea-ecc6-452f-bd71-99a4380e83ac",
+      "name": "Merge Test Pack"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Review the following Test Pack against the user story and acceptance criteria.\n\nUser Story:\n{{ $('Format Jira Story Text').item.json.formattedStory }}\n\nTest Pack (Test Cases + Test Data):\n{{ $json.testPackText }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "You are a senior QA Lead performing a peer review of a Test Pack (test cases + test data) against a user story and its Acceptance Criteria, before it goes to a human for final sign-off.\n\nReview across five dimensions:\n1. Coverage - any AC line or clearly implied scenario (positive/negative/edge) NOT covered by any test case.\n2. Clarity - vague or ambiguous steps/expected results.\n3. Correctness - steps that don't logically lead to the stated expected result, or results that contradict the AC.\n4. Structure/Format - missing preconditions, non-atomic steps, illogical step order.\n5. Duplication - test cases that substantially overlap with no meaningful difference.\n\nAlso sanity-check that the Test Data actually matches what each test case's steps/dataNeeded require.\n\nFor each issue found, create one entry with: id (RC-01, RC-02, ...), relatedTestCaseId (e.g. TC-03, or \"N/A - Coverage Gap\"), dimension (exactly one of \"Coverage\", \"Clarity\", \"Correctness\", \"Structure/Format\", \"Duplication\"), severity (\"High\" = must fix before storing, \"Medium\" = should fix, \"Low\" = minor polish), and comment (specific, actionable).\n\nDo not invent issues that aren't genuinely present. Then set:\n- overallVerdict: \"Needs Revision\" if at least one High severity issue, otherwise \"Approved\".\n- summary: 1-3 sentences on overall quality and readiness for storage.\n\nYou MUST always respond using the structured JSON output format provided to you. Never add any text outside that JSON structure."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        1632,
+        576
+      ],
+      "id": "183d9964-5b45-4243-b7ff-9c048df19ded",
+      "name": "Test Case Review Agent"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build the form payload for human approval. Runs every loop iteration.\nconst pack = $('Merge Test Pack').item.json;\nconst review = $input.item.json.output;\n\nlet issuesText = '(No issues found)';\nif (review.issues && review.issues.length) {\n  issuesText = review.issues.map(i => `[${i.id}] (${i.relatedTestCaseId} | ${i.dimension}/${i.severity}) ${i.comment}`).join('\\n');\n}\n\nreturn [{\n  json: {\n    issueKey: pack.issueKey,\n    summary: pack.summary,\n    testPackText: pack.testPackText,\n    reviewVerdict: review.overallVerdict,\n    reviewSummary: review.summary,\n    reviewIssuesText: issuesText,\n    revisionCount: pack.revisionCount,\n    maxRevisions: pack.maxRevisions\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1984,
+        576
+      ],
+      "id": "c9344e85-7945-4241-9ad3-e16815baff2e",
+      "name": "Prepare Human Review Payload"
+    },
+    {
+      "parameters": {
+        "resume": "form",
+        "formTitle": "Review Test Pack Before Storing in Jira",
+        "formDescription": "=",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Jira Issue",
+              "defaultValue": "={{ $json.issueKey }} - {{ $json.summary }}"
+            },
+            {
+              "fieldLabel": "Test Pack (Test Cases + Test Data)",
+              "fieldType": "textarea",
+              "defaultValue": "={{ $json.testPackText }}"
+            },
+            {
+              "fieldLabel": "Automated Review Verdict",
+              "defaultValue": "={{ $json.reviewVerdict }}"
+            },
+            {
+              "fieldLabel": "Automated Review Summary",
+              "fieldType": "textarea",
+              "defaultValue": "={{ $json.reviewSummary }}"
+            },
+            {
+              "fieldLabel": "Automated Review Issues",
+              "fieldType": "textarea",
+              "defaultValue": "={{ $json.reviewIssuesText }}"
+            },
+            {
+              "fieldLabel": "Review Status",
+              "defaultValue": "={{ $json.revisionCount === 0 ? 'Original Draft' : 'Revision ' + $json.revisionCount + ' of ' + $json.maxRevisions + ' used' }}"
+            },
+            {
+              "fieldLabel": "Revision Count",
+              "fieldType": "number",
+              "defaultValue": "={{ $json.revisionCount }}"
+            },
+            {
+              "fieldLabel": "Max Revisions",
+              "fieldType": "number",
+              "defaultValue": "={{ $json.maxRevisions }}"
+            },
+            {
+              "fieldLabel": "Revision Comments",
+              "fieldType": "textarea"
+            },
+            {
+              "fieldLabel": "Decision",
+              "fieldType": "dropdown",
+              "defaultValue": "Approved",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "Approved"
+                  },
+                  {
+                    "option": "Rejected"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        2208,
+        576
+      ],
+      "id": "ebb996aa-d7e4-425b-b4d5-0bb096d43923",
+      "name": "Wait for Human Approval",
+      "webhookId": "w2-loop-wait-0001"
+    },
+    {
+      "parameters": {
+        "jsCode": "const form = $input.item.json;\n\nconst revisionCount = Number(form['Revision Count']) || 0;\nconst maxRevisions = Number(form['Max Revisions']) || 3;\nconst comment = (form['Revision Comments'] || '').toString().trim();\nconst hasComment = comment.length > 0;\nconst canRevise = form.Decision === 'Rejected' && hasComment && revisionCount < maxRevisions;\n\nreturn [{\n  json: {\n    ...form,\n    revisionCount,\n    maxRevisions,\n    hasComment,\n    canRevise\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2432,
+        576
+      ],
+      "id": "a58ef1a9-db15-49ce-a4ee-f8e351d57f3f",
+      "name": "Compute Revision State"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "cond-approved",
+              "leftValue": "={{ $json.Decision }}",
+              "rightValue": "Approved",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2656,
+        576
+      ],
+      "id": "6c85488b-5680-46e8-ac9a-94ba0b8901dd",
+      "name": "Approved?"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "cond-canrevise",
+              "leftValue": "={{ $json.canRevise }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2880,
+        752
+      ],
+      "id": "d4ad7c86-24d3-4114-b595-99ffde4f45ea",
+      "name": "Can Revise?"
+    },
+    {
+      "parameters": {
+        "jsCode": "const form = $input.item.json;\n\nconst newRevisionCount = (form.revisionCount || 0) + 1;\n\nreturn [{\n  json: {\n    isRevision: true,\n    previousTestCases: $('AI Test Case Generator').item.json.output.testCases,\n    revisionComments: form['Revision Comments'],\n    revisionCount: newRevisionCount\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3104,
+        752
+      ],
+      "id": "073d8608-210f-478b-9afc-c85c2802c5d1",
+      "name": "Prepare Revision Context"
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.item.json;\n\nlet comment = `*Test Pack - Approved & Stored*\\n\\n`;\ncomment += `*Automated Review:* ${data['Automated Review Verdict'] || ''}\\n`;\ncomment += `*Review Summary:* ${data['Automated Review Summary'] || ''}\\n\\n`;\ncomment += `*Revisions before approval:* ${data.revisionCount || 0}\\n\\n`;\ncomment += `${data['Test Pack (Test Cases + Test Data)']}\\n`;\ncomment += `\\n_This Test Pack was drafted by the AI Test Case/Data Generator agents, reviewed by the AI Review Agent, and approved by a human before being stored on this story. In a production setup, replace this Jira-comment Store step with a push into Zephyr, Testmo, or Xray._`;\n\nreturn [{\n  json: {\n    issueKey: data['Jira Issue'].split(' - ')[0].trim(),\n    commentBody: comment,\n    revisionCount: data.revisionCount || 0\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2880,
+        480
+      ],
+      "id": "ef498ac3-1e0e-4107-8884-381a07f03a14",
+      "name": "Finalize Approved Test Pack"
+    },
+    {
+      "parameters": {
+        "resource": "issueComment",
+        "issueKey": "={{ $json.issueKey }}",
+        "comment": "={{ $json.commentBody }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.jira",
+      "typeVersion": 1,
+      "position": [
+        3104,
+        480
+      ],
+      "id": "b054ca98-5c59-4d99-81b9-65c829283e85",
+      "name": "Store Test Pack as Jira Comment",
+      "credentials": {
+        "jiraSoftwareCloudApi": {
+          "id": "j4mAJaEzAaEsHVVO",
+          "name": "Jira SW Cloud account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const created = $input.item.json;\nconst finalPack = $('Finalize Approved Test Pack').item.json;\n\nlet md = `**Decision:** Approved\\n\\n`;\nmd += `**Stored on:** ${finalPack.issueKey} (as a Jira comment)\\n\\n`;\nmd += `**Revisions before approval:** ${finalPack.revisionCount}\\n\\n`;\nmd += `${finalPack.commentBody}`;\n\nreturn [{\n  json: {\n    output: md,\n    decision: 'Approved',\n    issueKey: finalPack.issueKey,\n    revisionCount: finalPack.revisionCount\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3328,
+        480
+      ],
+      "id": "42919a07-6c7f-422e-9712-01d739a0a922",
+      "name": "Combine Final Output (Stored)"
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.item.json;\n\nlet md = `**Decision:** Rejected\\n\\n`;\n\nif (data.revisionCount >= data.maxRevisions) {\n  md += `Maximum revision attempts (${data.maxRevisions}) reached without approval. This Test Pack needs manual handling outside this workflow.\\n\\n`;\n} else if (!data.hasComment) {\n  md += `The Test Pack was rejected with no revision comments, so it was not sent back for AI revision. Nothing was stored on the Jira issue.\\n\\n`;\n}\n\nmd += `**Jira Issue:** ${data['Jira Issue']}\\n\\n`;\nmd += `**Last Automated Review Verdict:** ${data['Automated Review Verdict']}\\n\\n`;\nmd += `**Revisions used:** ${data.revisionCount} of ${data.maxRevisions}\\n\\n`;\nmd += `_To try again, start a new run referencing the same story, or hand this off for manual test design._`;\n\nreturn [{\n  json: {\n    output: md,\n    decision: 'Rejected',\n    revisionCount: data.revisionCount\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3104,
+        944
+      ],
+      "id": "19b175c1-9d70-4d0b-a542-bcd99b4eb985",
+      "name": "Final Rejection Output"
+    },
+    {
+      "parameters": {
+        "content": "## Workflow 2 (simplified, single-loop version): Story -> Test Pack -> Review -> Human Approval -> Store\n\n**Flow:** Jira Story -> AI generates Scenarios/Test Cases -> AI generates Test Data -> Merge into one Test Pack -> AI Review Agent checks it -> a human reviews everything in one form and Approves or Rejects (with comments) -> if rejected with comments (and under the revision limit), the SAME agent nodes regenerate the Test Pack addressing the feedback and loop back through the SAME Wait node for another round -> once Approved, the Test Pack is **Stored** as a formatted Jira comment on the story.\n\n**Why this is simpler than the earlier version:**\nInstead of duplicating the agents + Wait node per attempt, 'Prepare Revision Context' loops back directly into 'AI Test Case Generator', reusing every node (same pattern as your working 9.4_...with_revision.json). The Wait node's resume link staying the same across iterations is expected - n8n regenerates a fresh pause each time that node re-executes, so each round still prompts the reviewer and waits for a new submission. maxRevisions is set to 3 in 'Merge Test Pack' - change that one line to adjust the cap.\n\n**About the Store step:**\nStores the approved Test Pack as a Jira comment on the story (simple, no extra tooling). In production, swap 'Store Test Pack as Jira Comment' for a push into Zephyr, Testmo, Xray, or any test-case repository - everything upstream stays the same.",
+        "height": 520,
+        "width": 760,
+        "color": 5
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "deebe1b3-8f1f-4719-be35-1efdb04942f3",
+      "name": "Overview Note"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When chat message received": {
+      "main": [
+        [
+          {
+            "node": "Get Jira Story",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Jira Story": {
+      "main": [
+        [
+          {
+            "node": "Format Jira Story Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Jira Story Text": {
+      "main": [
+        [
+          {
+            "node": "AI Test Case Generator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Test Case Generator": {
+      "main": [
+        [
+          {
+            "node": "AI Test Data Generator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Test Data Generator": {
+      "main": [
+        [
+          {
+            "node": "Merge Test Pack",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Test Pack": {
+      "main": [
+        [
+          {
+            "node": "Test Case Review Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Test Case Review Agent": {
+      "main": [
+        [
+          {
+            "node": "Prepare Human Review Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Human Review Payload": {
+      "main": [
+        [
+          {
+            "node": "Wait for Human Approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait for Human Approval": {
+      "main": [
+        [
+          {
+            "node": "Compute Revision State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compute Revision State": {
+      "main": [
+        [
+          {
+            "node": "Approved?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Approved?": {
+      "main": [
+        [
+          {
+            "node": "Finalize Approved Test Pack",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Can Revise?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Finalize Approved Test Pack": {
+      "main": [
+        [
+          {
+            "node": "Store Test Pack as Jira Comment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store Test Pack as Jira Comment": {
+      "main": [
+        [
+          {
+            "node": "Combine Final Output (Stored)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Can Revise?": {
+      "main": [
+        [
+          {
+            "node": "Prepare Revision Context",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Final Rejection Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Revision Context": {
+      "main": [
+        [
+          {
+            "node": "AI Test Case Generator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Test Case Generator",
+            "type": "ai_languageModel",
+            "index": 0
+          },
+          {
+            "node": "AI Test Data Generator",
+            "type": "ai_languageModel",
+            "index": 0
+          },
+          {
+            "node": "Test Case Review Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Test Case Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "AI Test Case Generator",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Test Data Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "AI Test Data Generator",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Review Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Test Case Review Agent",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true
+  },
+  "versionId": "0c93099a-9fd4-4bbb-b5dc-6ef0c04b7d08",
+  "meta": {
+    "instanceId": "d4fd626aac667aafe8853a30557889c2711020a336e42d081a06267d32694745"
+  },
+  "nodeGroups": [],
+  "id": "JGwOjPMauJRwhggX",
+  "tags": []
+}

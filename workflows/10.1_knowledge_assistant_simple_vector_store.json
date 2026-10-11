@@ -1,0 +1,364 @@
+{
+  "name": "10.1_knowledge_assistant_simple_vector_store",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## LANE 1 - INGEST KNOWLEDGE (run manually, once / whenever doc changes)\n\n**SWAP ME:** Replace the text in the \"QA Knowledge Document\" node below with your own company's test strategy, standards, or glossary doc.\n\nThen click **Execute Workflow** on the Manual Trigger to (re)index it into the Simple Vector Store.\n\nThis does NOT run on every chat message - that's the point of RAG: ingest once, retrieve many times.",
+        "height": 260,
+        "width": 460,
+        "color": 5
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "04fc0888-cc52-4bfd-a347-8d7a0c9b6654",
+      "name": "Sticky Note - Ingestion"
+    },
+    {
+      "parameters": {
+        "content": "## LANE 2 - KNOWLEDGE ASSISTANT (grounded Q&A)\n\nAsk this agent QA-process questions (e.g. \"What's our Critical bug SLA?\", \"Which environment does regression run on?\").\n\nIt MUST search the vector store before answering - compare its grounded, specific answer against the SAME question asked to **8.2_test_case_data_generator.json** (generic agent, no RAG) to show the class the hallucination gap.",
+        "height": 260,
+        "width": 460,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -128,
+        1056
+      ],
+      "id": "19cdd2bd-606a-4b5a-996e-3e82677a06e8",
+      "name": "Sticky Note - Knowledge Assistant"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        48,
+        512
+      ],
+      "id": "25c5567d-68cd-44e2-903e-f1792a6163df",
+      "name": "Load Knowledge Base (Run Once)"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "d794f1ef-6f7f-4e87-833b-ad6a13c4495d",
+              "name": "documentText",
+              "value": "NIMBUS RETAIL - QA STANDARDS & TEST STRATEGY (v2.3)\n\n1. SEVERITY DEFINITIONS\n- Critical: Core checkout, payment, or login flow is completely broken for all users, OR any data loss/corruption, OR a security vulnerability. Must be reported within 2 hours of discovery via the #sev1-bridge Slack channel, tagging the on-call QA Lead directly.\n- High: A major feature is broken with no workaround (e.g. promo codes not applying), affecting a significant subset of users. Must be triaged and assigned within 1 business day.\n- Medium: Functionality is impaired but a workaround exists, or the issue affects a minor/non-core feature. Batched into the weekly Thursday triage meeting.\n- Low: Cosmetic, copy, or minor UX issues with no functional impact. Logged in backlog, no SLA.\n\n2. TEST ENVIRONMENTS\n- dev: continuous deploys from feature branches, unstable, used for dev smoke tests only.\n- qa-blue: the ONLY environment where the nightly automated regression suite runs. Data refreshes every night at 1 AM UTC.\n- qa-green: used exclusively for manual exploratory testing and demo prep; data is NOT refreshed automatically.\n- staging: pre-prod mirror, used for final sign-off testing before a release; requires a ticket in the \"Release Readiness\" Jira board to request a deploy.\n- prod: production. No testing is performed here except post-release smoke checks by the on-call QA Lead.\n\n3. TEST CASE NAMING CONVENTION\nAll test cases must be named: TC-<JIRA-KEY>-<2-digit-sequence>\nExample: TC-KAN-104-01, TC-KAN-104-02.\nTest case titles must start with a verb (e.g. \"Verify\", \"Confirm\", \"Validate\") - never start with \"Test that...\".\n\n4. BROWSER / DEVICE SUPPORT MATRIX\n- Desktop: Chrome (latest and latest-1), Safari (latest), Firefox (latest) - Edge is NOT officially supported.\n- Mobile: iOS 16 and above (Safari), Android 12 and above (Chrome).\n- Any new feature must have at least one test case executed on an actual physical device before it can be marked \"Ready for Release\" - simulator-only testing is not sufficient for sign-off.\n\n5. DEFINITION OF READY (DoR) CHECKLIST FOR STORIES ENTERING A SPRINT\nA story is NOT ready for sprint planning unless ALL of the following are true:\n- Acceptance Criteria are written in Given/When/Then or clear bullet form, with no ambiguous terms (e.g. \"fast\", \"appropriate\", \"user-friendly\" are not allowed without a measurable definition).\n- Negative and edge cases are explicitly called out in the AC, not just the happy path.\n- Any dependency on another team, API, or feature flag is named explicitly.\n- The story has a Readiness Score (per the QA Readiness Score rubric) of at least 80/100 before it can be pulled into a sprint.\n\n6. REGRESSION SUITE POLICY\n- The full regression suite runs nightly against qa-blue only, never against qa-green or staging.\n- Regression suite must be green (100% pass, 0 skipped without a documented waiver) before any release candidate can be promoted to staging.\n- A failing regression test may only be waived by the QA Lead, and the waiver must be logged in the release ticket with a reason and a follow-up Jira ticket.\n\n7. EXPLORATORY TESTING STANDARDS\n- Default charter time-box is 30 minutes unless the feature's complexity justifies up to 45 minutes.\n- Every exploratory session must end with a short debrief note posted in the story's Jira comments, even if no bugs were found.\n\n8. RELEASE READINESS SIGN-OFF\n- A release cannot go out without TWO sign-offs recorded on the \"Release Readiness\" Jira ticket: the QA Lead AND the Product Owner.\n- Release Readiness is only considered met if: regression suite is green on qa-blue, all Critical and High bugs linked to the release are closed, and the Coverage Report (from the QA Coverage & Release Readiness workflow) shows at least 90% of planned test cases executed.\n\n9. DEFECT TRIAGE SLA SUMMARY\n- Critical: 2 hours to report, immediate triage.\n- High: 1 business day to triage.\n- Medium/Low: weekly batch triage (Thursdays).\n",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        272,
+        512
+      ],
+      "id": "7d022323-d923-4810-bfa5-a14ab12a2ecd",
+      "name": "QA Knowledge Document"
+    },
+    {
+      "parameters": {
+        "chunkSize": 500,
+        "chunkOverlap": 50,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.textSplitterRecursiveCharacterTextSplitter",
+      "typeVersion": 1,
+      "position": [
+        712,
+        744
+      ],
+      "id": "fd108f8c-142c-4bf2-9ea5-df296e65ba78",
+      "name": "Recursive Character Text Splitter"
+    },
+    {
+      "parameters": {
+        "options": {
+          "metadata": {
+            "metadataValues": [
+              {
+                "name": "source",
+                "value": "Nimbus Retail QA Standards v2.3"
+              }
+            ]
+          }
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.documentDefaultDataLoader",
+      "typeVersion": 1,
+      "position": [
+        632,
+        536
+      ],
+      "id": "d298bfeb-0224-4480-b28b-999b7902d586",
+      "name": "Default Data Loader"
+    },
+    {
+      "parameters": {
+        "modelName": "models/text-embedding-004"
+      },
+      "type": "@n8n/n8n-nodes-langchain.embeddingsGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        504,
+        536
+      ],
+      "id": "1e01df48-331a-47ae-b279-68078abbed5d",
+      "name": "Embeddings Google Gemini (Ingestion)",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "7ZV2lM8NAVqObDgh",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "insert",
+        "memoryKey": "qa_knowledge_base",
+        "clearStore": true
+      },
+      "type": "@n8n/n8n-nodes-langchain.vectorStoreInMemory",
+      "typeVersion": 1.3,
+      "position": [
+        528,
+        304
+      ],
+      "id": "a208bac5-8826-4895-bd6f-961b5065f90d",
+      "name": "Insert into Vector Store"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        48,
+        1152
+      ],
+      "id": "7130f77d-e7ca-4ff8-986e-9376c9aa6802",
+      "name": "When chat message received",
+      "webhookId": "b1c2d3e4-6001-4a00-8000-000000000601"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.chatInput }}",
+        "options": {
+          "systemMessage": "You are the Knowledge Assistant for the QA team. You have access to a tool called qa_knowledge_base_search that searches the company's actual internal QA knowledge base (test strategy, severity definitions, environments, regression policy, defect SLAs, naming conventions, release sign-off process).\n\nRULES:\n1. For ANY question about QA process, standards, severity, environments, regression, defect SLAs, or any company-specific policy, you MUST call qa_knowledge_base_search first before answering - never answer from general knowledge or assumptions alone.\n2. Base your answer ONLY on what the retrieved knowledge base content actually says. Quote or closely paraphrase the relevant section.\n3. If the knowledge base search returns nothing relevant to the question, say explicitly: \"I couldn't find this in the QA knowledge base - this may not be documented, or you may need to check with the team.\" Do NOT fall back to a generic or invented answer.\n4. Keep answers concise and mention which part of the knowledge base you used (e.g. \"Per the Severity Definitions section...\").\n5. If the user asks something unrelated to QA process/standards (small talk, general questions), you may answer normally without using the tool."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        304,
+        1152
+      ],
+      "id": "e429ae7d-3ea4-4018-bae1-c1f7b6e6984d",
+      "name": "Knowledge Assistant Agent"
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-3.1-flash-lite",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1.2,
+      "position": [
+        280,
+        1384
+      ],
+      "id": "f6f42cfa-d93c-47a6-b4dd-7d8cca7e808c",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "7ZV2lM8NAVqObDgh",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "@n8n/n8n-nodes-langchain.embeddingsGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        488,
+        1592
+      ],
+      "id": "de3ebc2a-0539-4907-abc2-dfa3fbdec4c4",
+      "name": "Embeddings Google Gemini (Retrieval)",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "7ZV2lM8NAVqObDgh",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "retrieve-as-tool",
+        "toolDescription": "Searches the company's internal QA knowledge base (test strategy, severity definitions, environments, regression policy, defect triage SLAs, naming conventions, release sign-off process) for information relevant to the user's question. Always use this before answering any question about QA process, standards, or policy.",
+        "memoryKey": "qa_knowledge_base"
+      },
+      "type": "@n8n/n8n-nodes-langchain.vectorStoreInMemory",
+      "typeVersion": 1.3,
+      "position": [
+        408,
+        1384
+      ],
+      "id": "9833a811-2585-4088-b5c3-16d6c76846ee",
+      "name": "QA Knowledge Base (Retrieval Tool)"
+    },
+    {
+      "parameters": {
+        "jsCode": "const answer = $json.output || $json.text || '';\n\nconst md = `**Grounded Answer (from QA Knowledge Base):**\\n\\n${answer}\\n\\n_This answer was generated using RAG - the agent retrieved relevant chunks from the Simple Vector Store before responding. Ask the SAME question to the generic agent (8.2_test_case_data_generator.json) to compare and see the grounding difference._`;\n\nreturn [{ json: { output: md } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        768,
+        1152
+      ],
+      "id": "329b26cc-287a-451a-a1e1-1fc7a937610f",
+      "name": "Combine Final Output"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Load Knowledge Base (Run Once)": {
+      "main": [
+        [
+          {
+            "node": "QA Knowledge Document",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "QA Knowledge Document": {
+      "main": [
+        [
+          {
+            "node": "Insert into Vector Store",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Recursive Character Text Splitter": {
+      "ai_textSplitter": [
+        [
+          {
+            "node": "Default Data Loader",
+            "type": "ai_textSplitter",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Default Data Loader": {
+      "ai_document": [
+        [
+          {
+            "node": "Insert into Vector Store",
+            "type": "ai_document",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embeddings Google Gemini (Ingestion)": {
+      "ai_embedding": [
+        [
+          {
+            "node": "Insert into Vector Store",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When chat message received": {
+      "main": [
+        [
+          {
+            "node": "Knowledge Assistant Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Knowledge Assistant Agent": {
+      "main": [
+        [
+          {
+            "node": "Combine Final Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Knowledge Assistant Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "QA Knowledge Base (Retrieval Tool)": {
+      "ai_tool": [
+        [
+          {
+            "node": "Knowledge Assistant Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embeddings Google Gemini (Retrieval)": {
+      "ai_embedding": [
+        [
+          {
+            "node": "QA Knowledge Base (Retrieval Tool)",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true
+  },
+  "versionId": "82fd94a4-28ad-44d9-bcb9-ed29c3f2cd88",
+  "meta": {
+    "instanceId": "d4fd626aac667aafe8853a30557889c2711020a336e42d081a06267d32694745"
+  },
+  "nodeGroups": [],
+  "id": "FP9FDifr4ieCuQV3",
+  "tags": []
+}

@@ -1,0 +1,384 @@
+{
+  "name": "10.3_story_to_qa_readiness",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## WORKFLOW 1 - STORY TO QA READINESS\n\nRun this BEFORE sprint planning for any story being considered.\n\n**Input:** paste the Jira story key in chat (e.g. \"KAN-104\").\n\n**Pipeline:** Fetch Story -> AC Review & Risk Analysis -> Clarifying Questions -> Readiness Score (rule-based, threshold 80/100) -> Post full report as a Jira Comment.\n\nA story scoring below 80 should NOT be pulled into the sprint until the flagged gaps are resolved with the Product Owner.",
+        "height": 240,
+        "width": 480,
+        "color": 6
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "7a42bae7-f379-40f4-ae69-ce5d9495a485",
+      "name": "Sticky Note - Overview"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        48,
+        272
+      ],
+      "id": "7892603c-ef82-44ac-9828-4ca0f160df9c",
+      "name": "When chat message received",
+      "webhookId": "b1c2d3e4-8001-4a00-8000-000000000801"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "issueKey": "={{ $json.chatInput.trim() }}",
+        "simplifyOutput": true,
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.jira",
+      "typeVersion": 1,
+      "position": [
+        272,
+        272
+      ],
+      "id": "815bf831-c956-4737-b33f-b4d79dad8698",
+      "name": "Get Jira Story",
+      "credentials": {
+        "jiraSoftwareCloudApi": {
+          "id": "j4mAJaEzAaEsHVVO",
+          "name": "Jira SW Cloud account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract issue key, summary, and description text.\n// Handles multiple possible shapes depending on Jira node settings:\n// 1) simplifyOutput=true -> capitalized display keys directly on the item (Summary, Description)\n// 2) raw Jira API shape -> nested under fields.summary / fields.description\n// 3) description may be plain text OR Atlassian Document Format (ADF) JSON\nconst issue = $input.item.json;\n\nconst issueKey = issue.key || issue.id || 'UNKNOWN';\nconst summary = issue.Summary ?? issue.fields?.summary ?? issue.summary ?? '';\n\nlet rawDescription;\nif (issue.Description !== undefined) {\n  rawDescription = issue.Description;\n} else if (issue.fields?.description !== undefined) {\n  rawDescription = issue.fields.description;\n} else {\n  rawDescription = issue.description;\n}\n\nfunction adfToText(node) {\n  if (!node) return '';\n  if (typeof node === 'string') return node;\n  let text = '';\n  if (node.type === 'text' && node.text) {\n    text += node.text;\n  }\n  if (Array.isArray(node.content)) {\n    for (const child of node.content) {\n      text += adfToText(child);\n      if (child.type === 'paragraph' || child.type === 'listItem' || child.type === 'heading') {\n        text += '\\n';\n      }\n    }\n  }\n  return text;\n}\n\nlet descriptionText = '';\nif (!rawDescription) {\n  descriptionText = '(No description provided)';\n} else if (typeof rawDescription === 'string') {\n  descriptionText = rawDescription;\n} else if (typeof rawDescription === 'object') {\n  descriptionText = adfToText(rawDescription).trim();\n  if (!descriptionText) {\n    descriptionText = '(Description present but could not be parsed from ADF format)';\n  }\n}\n\nconst formattedStory = `Story: ${issueKey} - ${summary}\\n\\n${descriptionText}`;\n\nreturn [{\n  json: {\n    issueKey,\n    summary,\n    formattedStory\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        272
+      ],
+      "id": "7da5c9d0-361a-4eaa-930f-790b472c98de",
+      "name": "Format Jira Story Text"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Review the following Jira user story and its Acceptance Criteria for gaps and risks.\n\nJira Story / Acceptance Criteria:\n{{ $json.formattedStory }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "You are a senior QA Analyst performing a Definition-of-Ready review on a Jira story's Acceptance Criteria (AC), the same way an experienced QA would during backlog refinement.\n\nRead the AC carefully (it may be in plain bullet form or Gherkin Given/When/Then form) and identify every gap or risk that falls into ONLY these three categories:\n\n1. \"Ambiguity\" - wording that is vague, subjective, or open to multiple interpretations (e.g. \"the system should respond quickly\", \"appropriate error message\", undefined terms).\n2. \"Testability\" - a criterion that cannot be objectively verified as pass/fail as written (no measurable condition, no clear expected outcome, no way to observe the result).\n3. \"Missing Negative/Edge Case\" - the AC only describes the happy path and omits error handling, boundary values, invalid input, empty/null states, permission/role variations, or concurrency/duplicate scenarios that are clearly relevant to this story.\n\nDo not invent gaps that are not actually supported by the text. Do not flag minor stylistic issues. Focus on gaps that would genuinely block a QA engineer from writing confident, objective test cases.\n\nFor EACH gap found, provide:\n- id: sequential like GAP-01, GAP-02, ...\n- category: exactly one of \"Ambiguity\", \"Testability\", \"Missing Negative/Edge Case\"\n- severity: \"High\" (blocks reliable testing / major functional risk), \"Medium\" (creates some ambiguity but testing can partially proceed), or \"Low\" (minor, nice-to-clarify)\n- acReference: quote or paraphrase the specific AC line/bullet/scenario this gap relates to (if it is a missing case, describe what scenario is absent)\n- description: a precise explanation of why this is a gap/risk\n\nThen determine:\n- overallRiskLevel: \"High\" if any gap is High severity, else \"Medium\" if any gap is Medium severity, else \"Low\" if only Low severity gaps exist or no gaps at all.\n- verdict: \"Not Ready\" if overallRiskLevel is \"High\", otherwise \"Ready\". A story can still be \"Ready\" with Medium/Low gaps noted for follow-up, but never \"Ready\" with an unresolved High severity gap.\n- summary: 1-3 sentences giving your overall assessment of the AC quality.\n\nIf the AC is clear, complete, and testable with no meaningful gaps, return gaps as an empty array, verdict \"Ready\", overallRiskLevel \"Low\".\n\nYou MUST always respond using the structured JSON output format provided to you. Never add any text outside that JSON structure."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        704,
+        272
+      ],
+      "id": "87c05422-90a1-4089-95ea-2f261c63a595",
+      "name": "AC Review & Risk Agent"
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"verdict\": {\n      \"type\": \"string\",\n      \"enum\": [\n        \"Ready\",\n        \"Not Ready\"\n      ]\n    },\n    \"overallRiskLevel\": {\n      \"type\": \"string\",\n      \"enum\": [\n        \"High\",\n        \"Medium\",\n        \"Low\"\n      ]\n    },\n    \"summary\": {\n      \"type\": \"string\",\n      \"description\": \"1-3 sentence overall assessment of the AC quality\"\n    },\n    \"gaps\": {\n      \"type\": \"array\",\n      \"items\": {\n        \"type\": \"object\",\n        \"properties\": {\n          \"id\": {\n            \"type\": \"string\"\n          },\n          \"category\": {\n            \"type\": \"string\",\n            \"enum\": [\n              \"Ambiguity\",\n              \"Testability\",\n              \"Missing Negative/Edge Case\"\n            ]\n          },\n          \"severity\": {\n            \"type\": \"string\",\n            \"enum\": [\n              \"High\",\n              \"Medium\",\n              \"Low\"\n            ]\n          },\n          \"acReference\": {\n            \"type\": \"string\"\n          },\n          \"description\": {\n            \"type\": \"string\"\n          }\n        },\n        \"required\": [\n          \"id\",\n          \"category\",\n          \"severity\",\n          \"acReference\",\n          \"description\"\n        ]\n      }\n    }\n  },\n  \"required\": [\n    \"verdict\",\n    \"overallRiskLevel\",\n    \"summary\",\n    \"gaps\"\n  ]\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [
+        880,
+        528
+      ],
+      "id": "8858d6cf-f8af-4c55-aad8-2a0c653b2b23",
+      "name": "Structured Output Parser"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Based on the identified gaps/risks below in a Jira story's Acceptance Criteria, generate targeted clarifying questions for the Product Owner.\n\nOriginal Story / Acceptance Criteria:\n{{ $('Format Jira Story Text').item.json.formattedStory }}\n\nOverall Verdict: {{ $json.output.verdict }}\nOverall Risk Level: {{ $json.output.overallRiskLevel }}\n\nIdentified Gaps (JSON):\n{{ JSON.stringify($json.output.gaps) }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "You are a senior QA/BA who converts identified requirement gaps into sharp, specific clarifying questions to send to the Product Owner.\n\nRules:\n1. Generate exactly ONE question per gap in the input list - no more, no fewer. Do not generate questions for gaps that do not exist in the input.\n2. Each question MUST directly reference the specific ambiguous wording, untestable criterion, or missing scenario described in that gap. Never write generic questions like \"Can you clarify this?\" - always name the specific behavior, term, or scenario in question.\n3. Set relatedGapId to the exact id of the gap the question was generated from (e.g. GAP-01).\n4. Set category to the same category as the source gap (\"Ambiguity\", \"Testability\", or \"Missing Negative/Edge Case\").\n5. id should be sequential like Q-01, Q-02, ...\n6. If the gaps list is empty, return an empty questions array and set note to a short confirmation that no clarifying questions are needed because the AC is clear and complete.\n\nYou MUST always respond using the structured JSON output format provided to you. Never add any text outside that JSON structure."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        1104,
+        272
+      ],
+      "id": "0a24076c-02a3-4ff2-8f85-a80b914bc84f",
+      "name": "Requirement Question Generator"
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"questions\": {\n      \"type\": \"array\",\n      \"items\": {\n        \"type\": \"object\",\n        \"properties\": {\n          \"id\": {\n            \"type\": \"string\"\n          },\n          \"relatedGapId\": {\n            \"type\": \"string\"\n          },\n          \"category\": {\n            \"type\": \"string\"\n          },\n          \"question\": {\n            \"type\": \"string\"\n          }\n        },\n        \"required\": [\n          \"id\",\n          \"relatedGapId\",\n          \"category\",\n          \"question\"\n        ]\n      }\n    },\n    \"note\": {\n      \"type\": \"string\",\n      \"description\": \"Optional note, e.g. confirmation when there are no gaps to ask about\"\n    }\n  },\n  \"required\": [\n    \"questions\"\n  ]\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [
+        1280,
+        528
+      ],
+      "id": "60d2642d-2a60-4a29-b922-bdb5c11cac19",
+      "name": "Structured Output Parser1"
+    },
+    {
+      "parameters": {
+        "jsCode": "const review = $('AC Review & Risk Agent').item.json.output;\nconst gaps = review.gaps || [];\n\nlet highCount = 0, mediumCount = 0, lowCount = 0;\nfor (const g of gaps) {\n  if (g.severity === 'High') highCount++;\n  else if (g.severity === 'Medium') mediumCount++;\n  else if (g.severity === 'Low') lowCount++;\n}\n\n// Rule-based deterministic scoring:\n// Start at 100. High severity gaps are heavily penalized so that even ONE High gap\n// drops the score below the 80 threshold - keeping this consistent with the AC Review\n// Agent's own rule that any High gap means 'Not Ready'.\nlet score = 100;\nscore -= highCount * 25;\nscore -= mediumCount * 8;\nscore -= lowCount * 3;\nscore = Math.max(0, Math.min(100, score));\n\nconst threshold = 80;\nconst readinessVerdict = score >= threshold ? 'Ready' : 'Not Ready';\n\nreturn [{\n  json: {\n    readinessScore: score,\n    threshold,\n    readinessVerdict,\n    highCount,\n    mediumCount,\n    lowCount\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1504,
+        272
+      ],
+      "id": "162952ca-0255-4ef8-9dfc-c821cbd511ea",
+      "name": "Calculate Readiness Score"
+    },
+    {
+      "parameters": {
+        "jsCode": "const review = $('AC Review & Risk Agent').item.json.output;\nconst qOut = $('Requirement Question Generator').item.json.output;\nconst score = $json;\nconst storyInfo = $('Format Jira Story Text').item.json;\n\nconst gaps = review.gaps || [];\nconst questions = qOut.questions || [];\n\nlet md = `*QA Readiness Report - ${storyInfo.issueKey}*\\n\\n`;\nmd += `*Readiness Score:* ${score.readinessScore} / 100 (threshold: ${score.threshold})\\n`;\nmd += `*Readiness Verdict:* ${score.readinessVerdict}\\n`;\nmd += `*AC Review Verdict:* ${review.verdict}  |  *Overall Risk Level:* ${review.overallRiskLevel}\\n\\n`;\nmd += `*Summary:* ${review.summary}\\n\\n`;\n\nif (gaps.length === 0) {\n  md += `No gaps or risks identified in the Acceptance Criteria.\\n\\n`;\n} else {\n  md += `*Identified Gaps / Risks (${score.highCount} High, ${score.mediumCount} Medium, ${score.lowCount} Low):*\\n`;\n  for (const g of gaps) {\n    md += `- [${g.id}] (${g.category} / ${g.severity}) ${g.acReference} -> ${g.description}\\n`;\n  }\n  md += `\\n*Clarifying Questions for Product Owner:*\\n`;\n  for (const q of questions) {\n    md += `- [${q.id}] (ref ${q.relatedGapId}) ${q.question}\\n`;\n  }\n  md += `\\n`;\n}\n\nif (score.readinessVerdict === 'Not Ready') {\n  md += `_This story is NOT recommended for sprint planning until the above gaps are resolved with the Product Owner._\\n\\n`;\n} else {\n  md += `_This story meets the Definition of Ready threshold and may be pulled into sprint planning._\\n\\n`;\n}\n\nmd += `_This report was generated automatically by the Story -> QA Readiness workflow._`;\n\nreturn [{\n  json: {\n    issueKey: storyInfo.issueKey,\n    commentBody: md,\n    readinessScore: score.readinessScore,\n    readinessVerdict: score.readinessVerdict,\n    acVerdict: review.verdict,\n    overallRiskLevel: review.overallRiskLevel,\n    summary: review.summary,\n    gaps,\n    questions\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1728,
+        272
+      ],
+      "id": "8271a630-0e09-481f-8cf7-dfbbac280a82",
+      "name": "Prepare Jira Comment"
+    },
+    {
+      "parameters": {
+        "resource": "issueComment",
+        "issueKey": "={{ $json.issueKey }}",
+        "comment": "={{ $json.commentBody }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.jira",
+      "typeVersion": 1,
+      "position": [
+        1952,
+        272
+      ],
+      "id": "558a3ebc-1847-44d3-ade6-40edca1e4f63",
+      "name": "Post Readiness Report to Jira",
+      "credentials": {
+        "jiraSoftwareCloudApi": {
+          "id": "j4mAJaEzAaEsHVVO",
+          "name": "Jira SW Cloud account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const payload = $('Prepare Jira Comment').item.json;\n\nlet md = `**QA Readiness Report Posted to ${payload.issueKey}**\\n\\n`;\nmd += `**Readiness Score:** ${payload.readinessScore} / 100\\n`;\nmd += `**Readiness Verdict:** ${payload.readinessVerdict}\\n`;\nmd += `**AC Review Verdict:** ${payload.acVerdict}  |  **Overall Risk Level:** ${payload.overallRiskLevel}\\n\\n`;\nmd += `**Summary:** ${payload.summary}\\n\\n`;\n\nif (payload.gaps.length === 0) {\n  md += `No gaps or risks identified.\\n`;\n} else {\n  md += `**Gaps / Risks:**\\n`;\n  for (const g of payload.gaps) {\n    md += `- [${g.id}] (${g.category} / ${g.severity}) ${g.acReference} -> ${g.description}\\n`;\n  }\n  md += `\\n**Clarifying Questions:**\\n`;\n  for (const q of payload.questions) {\n    md += `- [${q.id}] ${q.question}\\n`;\n  }\n}\n\nmd += `\\n_Full report has also been added as a comment on ${payload.issueKey} in Jira._`;\n\nreturn [{ json: { output: md, issueKey: payload.issueKey, readinessScore: payload.readinessScore, readinessVerdict: payload.readinessVerdict } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2160,
+        272
+      ],
+      "id": "55baebbd-079d-4e52-8c18-736e582edeea",
+      "name": "Combine Final Output"
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-3.1-flash-lite",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1.2,
+      "position": [
+        560,
+        480
+      ],
+      "id": "c6534c8d-4711-434f-a624-a671dcb0a3f6",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "7ZV2lM8NAVqObDgh",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-3.1-flash-lite",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1.2,
+      "position": [
+        1008,
+        528
+      ],
+      "id": "448af292-c159-4aaf-b649-9732d4b9f7e4",
+      "name": "Google Gemini Chat Model1",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "7ZV2lM8NAVqObDgh",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When chat message received": {
+      "main": [
+        [
+          {
+            "node": "Get Jira Story",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Jira Story": {
+      "main": [
+        [
+          {
+            "node": "Format Jira Story Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Jira Story Text": {
+      "main": [
+        [
+          {
+            "node": "AC Review & Risk Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AC Review & Risk Agent": {
+      "main": [
+        [
+          {
+            "node": "Requirement Question Generator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "AC Review & Risk Agent",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Requirement Question Generator": {
+      "main": [
+        [
+          {
+            "node": "Calculate Readiness Score",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser1": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Requirement Question Generator",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Readiness Score": {
+      "main": [
+        [
+          {
+            "node": "Prepare Jira Comment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Jira Comment": {
+      "main": [
+        [
+          {
+            "node": "Post Readiness Report to Jira",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post Readiness Report to Jira": {
+      "main": [
+        [
+          {
+            "node": "Combine Final Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AC Review & Risk Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Requirement Question Generator",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true
+  },
+  "versionId": "c66c292e-7cbe-47dd-bc06-1470fe673954",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "d4fd626aac667aafe8853a30557889c2711020a336e42d081a06267d32694745"
+  },
+  "nodeGroups": [],
+  "id": "8h9zWvJ4SlzrgP85",
+  "tags": []
+}

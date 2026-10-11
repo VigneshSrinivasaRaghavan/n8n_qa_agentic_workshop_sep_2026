@@ -1,0 +1,583 @@
+{
+  "name": "10.2_grounded_test_case_generator",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## LANE 1 - INGEST API KNOWLEDGE (run manually, once / whenever docs change)\n\nTwo documents are combined and indexed here:\n1. **API Test Case Writing Standard** - our exact format/ID convention/required sections for API test cases.\n2. **Order Service API Specification** - 4 real endpoints with exact params, request/response bodies, and error codes.\n\n**SWAP ME:** Replace these with your real team's test case standard + real API/service documentation.\n\nClick Execute Workflow on the Manual Trigger to (re)index.",
+        "height": 280,
+        "width": 480,
+        "color": 5
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -176,
+        336
+      ],
+      "id": "5ff917f9-3f5b-489e-ba4b-5ec5b6b7b817",
+      "name": "Sticky Note - Ingestion"
+    },
+    {
+      "parameters": {
+        "content": "## LANE 2 - GENERIC TEST CASE GENERATOR (NO RAG)\n\nSame engine as 8.2_test_case_data_generator.json but no knowledge base access.\n\nAsk: \"Write API test cases for POST /orders (Create Order)\"\n\nThe agent has NEVER seen the real field names, status codes, or our test case format - watch it HALLUCINATE plausible-looking but wrong details (made-up fields, generic status codes, invented ID format).",
+        "height": 260,
+        "width": 480,
+        "color": 3
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -176,
+        944
+      ],
+      "id": "824bbfb6-43d9-470c-b2b2-c8eb833ae45c",
+      "name": "Sticky Note - Lane 2"
+    },
+    {
+      "parameters": {
+        "content": "## LANE 3 - GROUNDED TEST CASE GENERATOR (WITH RAG)\n\nSame question, SAME underlying agent engine as Lane 2 - but this one MUST search the knowledge base first.\n\nIt will retrieve the exact field names, types, constraints, status codes, and error bodies for POST /orders, plus our exact test case ID format and required sections - producing test cases that are immediately usable, no guessing.\n\nCompare its output side-by-side with Lane 2 to show the class the real-world impact of grounding.",
+        "height": 260,
+        "width": 480,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -176,
+        1456
+      ],
+      "id": "125882a0-b54e-4575-b935-fe6e4855fa57",
+      "name": "Sticky Note - Lane 3"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -128,
+        688
+      ],
+      "id": "a16561b4-b28c-4dc0-a0ff-d33b26f9fe8e",
+      "name": "Load API Knowledge Base (Run Once)"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "565b71ca-55d8-44ef-961c-7cf75cfeacc9",
+              "name": "documentText",
+              "value": "NIMBUS RETAIL - API TEST CASE WRITING STANDARD (v1.1)\n\n1. TEST CASE ID FORMAT\nAll API test cases must be named: API-TC-<ENDPOINT-SHORTNAME>-<2-digit-sequence>\nENDPOINT-SHORTNAME is the endpoint's short code (see API spec doc), e.g. for Create Order it is \"CRTORD\".\nExample: API-TC-CRTORD-01, API-TC-CRTORD-02.\n\n2. REQUIRED SECTIONS PER TEST CASE\nEvery API test case must contain exactly these fields, in this order:\n- Title: must start with \"Verify\" and name the exact endpoint and scenario (e.g. \"Verify POST /orders returns 201 when a valid single-item order is submitted\").\n- Type: Positive, Negative, or Edge Case.\n- Priority: High, Medium, or Low - High is mandatory for any test covering a required field validation or auth failure.\n- Preconditions: auth/session state, required existing data (e.g. \"Customer is authenticated with a valid bearer token\", \"Product SKU-1001 exists and is in stock\").\n- Request Method & Endpoint: exact HTTP verb and path, including path parameters filled with example values (e.g. \"GET /orders/ORD-2001\").\n- Request Headers: must always explicitly list the Authorization header requirement and Content-Type: application/json.\n- Request Body: the EXACT JSON body to send, using realistic values that match the field names, types, and constraints defined in the API Specification document - never invented field names.\n- Expected Status Code: the precise HTTP status code expected (e.g. 201, 400, 404, 401, 422) per the API Specification's documented error codes - never a generic guess.\n- Expected Response Body: key fields expected in the response JSON, matching the API Specification's documented response schema.\n- Validation Points: a bullet list of specific assertions beyond status code (e.g. \"orderId is a non-empty string starting with ORD-\", \"totalAmount equals sum of line item subtotals plus tax\").\n\n3. NEGATIVE / EDGE CASE RULES\n- Every endpoint must have at least one test case for: missing required field, invalid data type for a field, and an auth failure (missing/expired token) - using the EXACT field names and constraints from the API Specification.\n- Boundary test cases must use the exact min/max constraints documented for that field (e.g. if quantity max is 50, test with 50 and 51, not arbitrary numbers).\n\n4. STYLE RULES\n- Never use placeholder values like \"test@test.com\" or \"string\" - use realistic values consistent with the domain (e.g. customer emails like \"alex.morgan@example.com\", real-looking SKUs like \"SKU-1001\").\n- Never invent endpoints, fields, or status codes that are not documented in the API Specification - if something is not documented, explicitly state \"Not documented - confirm with API owner\" rather than guessing.\n",
+              "type": "string"
+            },
+            {
+              "id": "192a410a-7fe8-433c-b54a-2f6a46369525",
+              "name": "source",
+              "value": "API Test Case Writing Standard v1.1",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        96,
+        608
+      ],
+      "id": "6a7d1b5a-c3e8-4793-89aa-62de59e51ca8",
+      "name": "Test Case Format Standard"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "f514af08-f517-46bb-91da-317f7e07dd8d",
+              "name": "documentText",
+              "value": "NIMBUS RETAIL - ORDER SERVICE API SPECIFICATION (v1.4)\nBase URL: https://api.nimbusretail.com/v1\nAuth: All endpoints require header \"Authorization: Bearer <token>\". Missing/expired token returns 401 with body {\"error\": \"UNAUTHORIZED\", \"message\": \"Missing or invalid token\"}.\n\nENDPOINT 1: CREATE ORDER (shortcode: CRTORD)\nMethod & Path: POST /orders\nDescription: Creates a new order for the authenticated customer.\nRequest Headers: Authorization (required), Content-Type: application/json\nRequest Body fields:\n- customerId (string, required): existing customer ID, format \"CUST-<digits>\", e.g. \"CUST-4821\"\n- items (array, required, min 1 item, max 20 items): each item has:\n  - sku (string, required): format \"SKU-<4 digits>\", e.g. \"SKU-1001\"\n  - quantity (integer, required, min 1, max 50): quantity of that SKU\n- promoCode (string, optional): alphanumeric, 4-12 characters, e.g. \"SAVE10\"\n- shippingAddressId (string, required): existing address ID, format \"ADDR-<digits>\"\nSuccess Response: 201 Created\nBody: { \"orderId\": \"ORD-<digits>\", \"status\": \"PENDING\", \"totalAmount\": <number>, \"currency\": \"USD\", \"createdAt\": \"<ISO8601 timestamp>\" }\nError Responses:\n- 400 Bad Request if items array is empty or missing required fields: {\"error\": \"VALIDATION_ERROR\", \"message\": \"<field> is required\"}\n- 422 Unprocessable Entity if a SKU does not exist or is out of stock: {\"error\": \"SKU_UNAVAILABLE\", \"message\": \"SKU <sku> is out of stock\"}\n- 422 Unprocessable Entity if promoCode is invalid or expired: {\"error\": \"INVALID_PROMO\", \"message\": \"Promo code is invalid or expired\"}\n- 404 Not Found if shippingAddressId does not belong to the customer: {\"error\": \"ADDRESS_NOT_FOUND\", \"message\": \"Shipping address not found\"}\n- 401 Unauthorized per auth rules above\n\nENDPOINT 2: GET ORDER DETAILS (shortcode: GETORD)\nMethod & Path: GET /orders/{orderId}\nDescription: Retrieves full details of a single order by ID.\nRequest Headers: Authorization (required)\nPath Parameters: orderId (string, required, format \"ORD-<digits>\")\nSuccess Response: 200 OK\nBody: { \"orderId\": \"ORD-<digits>\", \"customerId\": \"CUST-<digits>\", \"status\": \"PENDING|CONFIRMED|SHIPPED|DELIVERED|CANCELLED\", \"items\": [ {\"sku\": \"...\", \"quantity\": n, \"unitPrice\": n} ], \"totalAmount\": n, \"currency\": \"USD\" }\nError Responses:\n- 404 Not Found if orderId does not exist: {\"error\": \"ORDER_NOT_FOUND\", \"message\": \"Order not found\"}\n- 403 Forbidden if the order belongs to a different customer than the authenticated token: {\"error\": \"FORBIDDEN\", \"message\": \"You do not have access to this order\"}\n- 401 Unauthorized per auth rules above\n\nENDPOINT 3: CANCEL ORDER (shortcode: CNCLORD)\nMethod & Path: POST /orders/{orderId}/cancel\nDescription: Cancels an order if it is still in a cancellable state.\nRequest Headers: Authorization (required), Content-Type: application/json\nPath Parameters: orderId (string, required, format \"ORD-<digits>\")\nRequest Body fields:\n- reason (string, optional, max 200 characters): free-text cancellation reason\nBusiness Rule: Only orders with status PENDING or CONFIRMED can be cancelled. Orders already SHIPPED, DELIVERED, or CANCELLED cannot be cancelled.\nSuccess Response: 200 OK\nBody: { \"orderId\": \"ORD-<digits>\", \"status\": \"CANCELLED\", \"cancelledAt\": \"<ISO8601 timestamp>\" }\nError Responses:\n- 409 Conflict if order status is SHIPPED, DELIVERED, or already CANCELLED: {\"error\": \"INVALID_STATE\", \"message\": \"Order cannot be cancelled in its current state: <status>\"}\n- 404 Not Found if orderId does not exist: {\"error\": \"ORDER_NOT_FOUND\", \"message\": \"Order not found\"}\n- 401 Unauthorized per auth rules above\n\nENDPOINT 4: LIST CUSTOMER ORDERS (shortcode: LSTORD)\nMethod & Path: GET /orders?customerId={customerId}&status={status}&page={page}&pageSize={pageSize}\nDescription: Lists orders for a customer, with optional status filter and pagination.\nRequest Headers: Authorization (required)\nQuery Parameters:\n- customerId (string, required): format \"CUST-<digits>\"\n- status (string, optional): one of PENDING, CONFIRMED, SHIPPED, DELIVERED, CANCELLED; omit to return all statuses\n- page (integer, optional, default 1, min 1)\n- pageSize (integer, optional, default 20, min 1, max 100)\nSuccess Response: 200 OK\nBody: { \"orders\": [ {\"orderId\": \"...\", \"status\": \"...\", \"totalAmount\": n, \"createdAt\": \"...\"} ], \"page\": n, \"pageSize\": n, \"totalCount\": n }\nError Responses:\n- 400 Bad Request if pageSize exceeds 100: {\"error\": \"VALIDATION_ERROR\", \"message\": \"pageSize must not exceed 100\"}\n- 403 Forbidden if customerId does not match the authenticated token's customer: {\"error\": \"FORBIDDEN\", \"message\": \"You do not have access to this customer's orders\"}\n- 401 Unauthorized per auth rules above\n",
+              "type": "string"
+            },
+            {
+              "id": "228a6f83-41c4-4e95-95f6-61464e5b4da9",
+              "name": "source",
+              "value": "Order Service API Specification v1.4",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        96,
+        800
+      ],
+      "id": "fdda1339-53c9-4a77-9ef6-e53b283e35bc",
+      "name": "Order Service API Specification"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineAll",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        304,
+        704
+      ],
+      "id": "1f30913c-05ad-435d-8df7-9c6cd9be05d9",
+      "name": "Merge Both Documents"
+    },
+    {
+      "parameters": {
+        "chunkSize": 500,
+        "chunkOverlap": 50,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.textSplitterRecursiveCharacterTextSplitter",
+      "typeVersion": 1,
+      "position": [
+        528,
+        880
+      ],
+      "id": "a32cce3a-9617-4c87-a376-1d3587842c1f",
+      "name": "Recursive Character Text Splitter"
+    },
+    {
+      "parameters": {
+        "options": {
+          "metadata": {
+            "metadataValues": [
+              {
+                "name": "source",
+                "value": "={{ $json.source }}"
+              }
+            ]
+          }
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.documentDefaultDataLoader",
+      "typeVersion": 1,
+      "position": [
+        528,
+        704
+      ],
+      "id": "1db9666b-7347-475c-84e4-e2fb14b5d924",
+      "name": "Default Data Loader"
+    },
+    {
+      "parameters": {
+        "modelName": "models/text-embedding-004"
+      },
+      "type": "@n8n/n8n-nodes-langchain.embeddingsGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        752,
+        880
+      ],
+      "id": "d10d0f09-1804-4179-bb21-18830719bcd0",
+      "name": "Embeddings Google Gemini (Ingestion)",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "7ZV2lM8NAVqObDgh",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "insert",
+        "memoryKey": "api_test_knowledge_base",
+        "clearStore": true
+      },
+      "type": "@n8n/n8n-nodes-langchain.vectorStoreInMemory",
+      "typeVersion": 1.3,
+      "position": [
+        880,
+        688
+      ],
+      "id": "95c180f8-3a7c-4038-b9dd-ae3a84b63320",
+      "name": "Insert into Vector Store"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        -128,
+        1104
+      ],
+      "id": "b7ec80ca-1a8d-4115-8f31-3765c9864fee",
+      "name": "When chat message received (Generic)",
+      "webhookId": "b1c2d3e4-7001-4a00-8000-000000000701"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.chatInput }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "You are a senior QA Analyst who writes API test cases.\n\nYou have NOT been given any internal company documentation, API specification, or test case writing standard. Rely only on your own general knowledge of REST API testing best practices to write test cases for the endpoint the user names.\n\nDecide internally:\n- If the user's request names a clear HTTP method and endpoint, set decision to \"Approve\" and proceed to generate test cases using your best general assumptions about typical fields, status codes, and response shapes for that kind of endpoint.\n- If the request is too vague to identify any endpoint at all, set decision to \"Denied\" and explain why in reason, with an empty testCases array.\n\nIf decision is \"Approve\", generate 4 to 8 test cases covering Positive, Negative, and Edge Case types. For EACH test case provide: id (use your own reasonable ID scheme), title (must start with a verb), type, priority, preconditions, requestMethodAndEndpoint, requestHeaders, requestBody (your best guess at realistic field names/values), expectedStatusCode (your best guess), expectedResponseBody (your best guess), validationPoints.\n\nYou MUST always respond using the structured JSON output format provided to you. Never add any text outside that JSON structure."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        128,
+        1104
+      ],
+      "id": "d49f1090-6ccb-409d-9878-9224e9a88d42",
+      "name": "Generic API Test Case Generator (No RAG)"
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"decision\": {\n      \"type\": \"string\",\n      \"enum\": [\n        \"Approve\",\n        \"Denied\"\n      ]\n    },\n    \"reason\": {\n      \"type\": \"string\",\n      \"description\": \"Explanation of the decision. Required detail when Denied; short confirmation when Approved.\"\n    },\n    \"testCases\": {\n      \"type\": \"array\",\n      \"items\": {\n        \"type\": \"object\",\n        \"properties\": {\n          \"id\": {\n            \"type\": \"string\"\n          },\n          \"title\": {\n            \"type\": \"string\"\n          },\n          \"type\": {\n            \"type\": \"string\",\n            \"enum\": [\n              \"Positive\",\n              \"Negative\",\n              \"Edge Case\"\n            ]\n          },\n          \"priority\": {\n            \"type\": \"string\",\n            \"enum\": [\n              \"High\",\n              \"Medium\",\n              \"Low\"\n            ]\n          },\n          \"preconditions\": {\n            \"type\": \"string\"\n          },\n          \"requestMethodAndEndpoint\": {\n            \"type\": \"string\"\n          },\n          \"requestHeaders\": {\n            \"type\": \"string\"\n          },\n          \"requestBody\": {\n            \"type\": \"string\"\n          },\n          \"expectedStatusCode\": {\n            \"type\": \"string\"\n          },\n          \"expectedResponseBody\": {\n            \"type\": \"string\"\n          },\n          \"validationPoints\": {\n            \"type\": \"string\"\n          }\n        },\n        \"required\": [\n          \"id\",\n          \"title\",\n          \"type\",\n          \"priority\",\n          \"preconditions\",\n          \"requestMethodAndEndpoint\",\n          \"requestHeaders\",\n          \"requestBody\",\n          \"expectedStatusCode\",\n          \"expectedResponseBody\",\n          \"validationPoints\"\n        ]\n      }\n    }\n  },\n  \"required\": [\n    \"decision\",\n    \"reason\",\n    \"testCases\"\n  ]\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [
+        304,
+        1328
+      ],
+      "id": "8d9676e1-1cba-40f6-ade5-a867d66fa469",
+      "name": "Structured Output Parser (Lane 2)"
+    },
+    {
+      "parameters": {
+        "jsCode": "const result = $json.output;\nconst testCases = result.testCases || [];\n\nlet md = `**Decision:** ${result.decision}\\n\\n**Reason:** ${result.reason}\\n\\n`;\n\nif (result.decision === 'Denied') {\n  md += `No test cases were generated.\\n`;\n} else {\n  md += `## API Test Cases\\n\\n`;\n  for (const tc of testCases) {\n    md += `### [${tc.id}] ${tc.title} (${tc.type} / ${tc.priority})\\n`;\n    md += `**Preconditions:** ${tc.preconditions}\\n\\n`;\n    md += `**Request:** ${tc.requestMethodAndEndpoint}\\n\\n`;\n    md += `**Headers:** ${tc.requestHeaders}\\n\\n`;\n    md += `**Request Body:** ${tc.requestBody}\\n\\n`;\n    md += `**Expected Status Code:** ${tc.expectedStatusCode}\\n\\n`;\n    md += `**Expected Response Body:** ${tc.expectedResponseBody}\\n\\n`;\n    md += `**Validation Points:** ${tc.validationPoints}\\n\\n`;\n  }\n}\n\nreturn [{ json: { output: md, decision: result.decision, reason: result.reason, testCases } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        496,
+        1104
+      ],
+      "id": "8bb2de15-4173-4244-87d0-b5ceb501f106",
+      "name": "Combine Final Output (Lane 2 - Generic)"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.chatInput }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "You are a senior QA Analyst who writes API test cases for the company's Order Service.\n\nYou have access to a tool called api_knowledge_search that searches two internal documents:\n1. The company's API Test Case Writing Standard (exact test case ID format, required sections, style rules, negative/edge case rules).\n2. The Order Service API Specification (exact endpoints, request/response fields, types, constraints, and documented status/error codes).\n\nRULES:\n1. Before writing ANY test case, you MUST call api_knowledge_search at least twice: once to retrieve the exact API specification for the endpoint the user named, and once to retrieve the exact test case writing standard/format. Never answer from assumptions or general REST API knowledge.\n2. Use the EXACT field names, data types, constraints, status codes, and error response bodies found in the retrieved API Specification content. Never invent a field, status code, or endpoint that is not present in the retrieved content.\n3. Follow the EXACT test case ID format, required sections, and style rules found in the retrieved Test Case Writing Standard content (e.g. correct ID prefix/shortcode, title must start with \"Verify\", realistic non-placeholder values).\n4. If the requested endpoint is not found in the retrieved content, set decision to \"Denied\" and explain in reason that this endpoint is not documented in the knowledge base - do NOT guess or fall back to generic assumptions.\n5. If decision is \"Approve\", generate 4 to 8 test cases covering Positive, Negative (including missing required field, invalid data type, and auth failure per the standard), and Edge Case types (using the exact min/max boundaries documented), each with: id (following the exact shortcode format), title (starting with \"Verify\"), type, priority, preconditions, requestMethodAndEndpoint, requestHeaders, requestBody (using exact documented field names and realistic values), expectedStatusCode (exact documented code), expectedResponseBody (matching documented schema), validationPoints.\n\nYou MUST always respond using the structured JSON output format provided to you. Never add any text outside that JSON structure."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        128,
+        1616
+      ],
+      "id": "4ac7d94b-9ce4-4926-848d-83cc37d8c85a",
+      "name": "Grounded API Test Case Generator (With RAG)"
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"decision\": {\n      \"type\": \"string\",\n      \"enum\": [\n        \"Approve\",\n        \"Denied\"\n      ]\n    },\n    \"reason\": {\n      \"type\": \"string\",\n      \"description\": \"Explanation of the decision. Required detail when Denied; short confirmation when Approved.\"\n    },\n    \"testCases\": {\n      \"type\": \"array\",\n      \"items\": {\n        \"type\": \"object\",\n        \"properties\": {\n          \"id\": {\n            \"type\": \"string\"\n          },\n          \"title\": {\n            \"type\": \"string\"\n          },\n          \"type\": {\n            \"type\": \"string\",\n            \"enum\": [\n              \"Positive\",\n              \"Negative\",\n              \"Edge Case\"\n            ]\n          },\n          \"priority\": {\n            \"type\": \"string\",\n            \"enum\": [\n              \"High\",\n              \"Medium\",\n              \"Low\"\n            ]\n          },\n          \"preconditions\": {\n            \"type\": \"string\"\n          },\n          \"requestMethodAndEndpoint\": {\n            \"type\": \"string\"\n          },\n          \"requestHeaders\": {\n            \"type\": \"string\"\n          },\n          \"requestBody\": {\n            \"type\": \"string\"\n          },\n          \"expectedStatusCode\": {\n            \"type\": \"string\"\n          },\n          \"expectedResponseBody\": {\n            \"type\": \"string\"\n          },\n          \"validationPoints\": {\n            \"type\": \"string\"\n          }\n        },\n        \"required\": [\n          \"id\",\n          \"title\",\n          \"type\",\n          \"priority\",\n          \"preconditions\",\n          \"requestMethodAndEndpoint\",\n          \"requestHeaders\",\n          \"requestBody\",\n          \"expectedStatusCode\",\n          \"expectedResponseBody\",\n          \"validationPoints\"\n        ]\n      }\n    }\n  },\n  \"required\": [\n    \"decision\",\n    \"reason\",\n    \"testCases\"\n  ]\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [
+        224,
+        1840
+      ],
+      "id": "afefa910-6198-4b75-a253-d70f252b5afc",
+      "name": "Structured Output Parser (Lane 3)"
+    },
+    {
+      "parameters": {},
+      "type": "@n8n/n8n-nodes-langchain.embeddingsGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        496,
+        1984
+      ],
+      "id": "e8a90127-46de-49c7-81ae-96dbf34e2978",
+      "name": "Embeddings Google Gemini (Retrieval)",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "7ZV2lM8NAVqObDgh",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "retrieve-as-tool",
+        "toolDescription": "Searches the company's internal API Test Case Writing Standard and the Order Service API Specification for exact endpoint details (fields, types, constraints, status codes, response schemas) and exact test case format rules. Always call this before writing any API test case.",
+        "memoryKey": "api_test_knowledge_base",
+        "topK": 5
+      },
+      "type": "@n8n/n8n-nodes-langchain.vectorStoreInMemory",
+      "typeVersion": 1.3,
+      "position": [
+        496,
+        1824
+      ],
+      "id": "a35bc56b-a34a-4971-b1cc-b06cfce88cc8",
+      "name": "API Knowledge Base (Retrieval Tool)"
+    },
+    {
+      "parameters": {
+        "jsCode": "const result = $json.output;\nconst testCases = result.testCases || [];\n\nlet md = `**Decision:** ${result.decision}\\n\\n**Reason:** ${result.reason}\\n\\n`;\n\nif (result.decision === 'Denied') {\n  md += `No test cases were generated.\\n`;\n} else {\n  md += `## API Test Cases\\n\\n`;\n  for (const tc of testCases) {\n    md += `### [${tc.id}] ${tc.title} (${tc.type} / ${tc.priority})\\n`;\n    md += `**Preconditions:** ${tc.preconditions}\\n\\n`;\n    md += `**Request:** ${tc.requestMethodAndEndpoint}\\n\\n`;\n    md += `**Headers:** ${tc.requestHeaders}\\n\\n`;\n    md += `**Request Body:** ${tc.requestBody}\\n\\n`;\n    md += `**Expected Status Code:** ${tc.expectedStatusCode}\\n\\n`;\n    md += `**Expected Response Body:** ${tc.expectedResponseBody}\\n\\n`;\n    md += `**Validation Points:** ${tc.validationPoints}\\n\\n`;\n  }\n}\n\nreturn [{ json: { output: md, decision: result.decision, reason: result.reason, testCases } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        496,
+        1616
+      ],
+      "id": "b2ef51fc-d95d-4a0b-88fb-6dc032ceede0",
+      "name": "Combine Final Output (Lane 3 - Grounded)"
+    },
+    {
+      "parameters": {
+        "model": "openai/gpt-oss-safeguard-20b",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [
+        -16,
+        1312
+      ],
+      "id": "0a49ce20-cbb5-49f0-9165-262cd1e5ea8b",
+      "name": "Groq Chat Model",
+      "credentials": {
+        "groqApi": {
+          "id": "PTObdGFoUkM2Jx51",
+          "name": "Groq account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-3.1-flash-lite",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1.2,
+      "position": [
+        -16,
+        1824
+      ],
+      "id": "3cd995e7-60e0-42cd-86fa-392a78408df3",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "7ZV2lM8NAVqObDgh",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Load API Knowledge Base (Run Once)": {
+      "main": [
+        [
+          {
+            "node": "Test Case Format Standard",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Order Service API Specification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Test Case Format Standard": {
+      "main": [
+        [
+          {
+            "node": "Merge Both Documents",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Order Service API Specification": {
+      "main": [
+        [
+          {
+            "node": "Merge Both Documents",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Both Documents": {
+      "main": [
+        [
+          {
+            "node": "Insert into Vector Store",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Recursive Character Text Splitter": {
+      "ai_textSplitter": [
+        [
+          {
+            "node": "Default Data Loader",
+            "type": "ai_textSplitter",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Default Data Loader": {
+      "ai_document": [
+        [
+          {
+            "node": "Insert into Vector Store",
+            "type": "ai_document",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embeddings Google Gemini (Ingestion)": {
+      "ai_embedding": [
+        [
+          {
+            "node": "Insert into Vector Store",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When chat message received (Generic)": {
+      "main": [
+        [
+          {
+            "node": "Grounded API Test Case Generator (With RAG)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generic API Test Case Generator (No RAG)": {
+      "main": [
+        [
+          {
+            "node": "Combine Final Output (Lane 2 - Generic)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser (Lane 2)": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Generic API Test Case Generator (No RAG)",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Grounded API Test Case Generator (With RAG)": {
+      "main": [
+        [
+          {
+            "node": "Combine Final Output (Lane 3 - Grounded)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser (Lane 3)": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Grounded API Test Case Generator (With RAG)",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API Knowledge Base (Retrieval Tool)": {
+      "ai_tool": [
+        [
+          {
+            "node": "Grounded API Test Case Generator (With RAG)",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embeddings Google Gemini (Retrieval)": {
+      "ai_embedding": [
+        [
+          {
+            "node": "API Knowledge Base (Retrieval Tool)",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Generic API Test Case Generator (No RAG)",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Grounded API Test Case Generator (With RAG)",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true
+  },
+  "versionId": "7b5e542f-fc5d-433a-a082-7661948e1410",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "d4fd626aac667aafe8853a30557889c2711020a336e42d081a06267d32694745"
+  },
+  "nodeGroups": [],
+  "id": "lwLWwUsHS0DG62TH",
+  "tags": []
+}

@@ -1,0 +1,557 @@
+{
+  "name": "9.4_jira_bug_creation_agent_human_approved_with_revision",
+  "nodes": [
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        0
+      ],
+      "id": "c1d2e3f4-3001-4a00-8000-000000000001",
+      "name": "When chat message received",
+      "webhookId": "c1d2e3f4-3001-4a00-8000-000000000101"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse the chat message to extract the related Jira story key and the raw bug description.\n// Expected format: \"KAN-1: promo code field does not trim leading spaces...\"\nconst input = $json.chatInput || '';\n\nconst keyMatch = input.match(/\\b([A-Z][A-Z0-9]+-\\d+)\\b/);\nconst storyKey = keyMatch ? keyMatch[1] : null;\nconst projectKey = storyKey ? storyKey.split('-')[0] : null;\n\nlet rawBugDescription = input;\nif (keyMatch) {\n  rawBugDescription = input.replace(keyMatch[0], '').replace(/^[:\\-\\s]+/, '').trim();\n}\n\nreturn [{\n  json: {\n    storyKey,\n    projectKey,\n    rawBugDescription\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ],
+      "id": "c1d2e3f4-3002-4a00-8000-000000000002",
+      "name": "Parse Story Key & Bug Text"
+    },
+    {
+      "parameters": {
+        "resource": "issue",
+        "operation": "get",
+        "issueKey": "={{ $json.storyKey }}",
+        "simplifyOutput": true,
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.jira",
+      "typeVersion": 1,
+      "position": [
+        420,
+        0
+      ],
+      "id": "c1d2e3f4-3003-4a00-8000-000000000003",
+      "name": "Get Related Story",
+      "credentials": {
+        "jiraSoftwareCloudApi": {
+          "id": "REPLACE_WITH_YOUR_JIRA_CREDENTIAL_ID",
+          "name": "Jira SW Cloud account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Turn the following bug information into a structured bug report.\n\n{{ $json.isRevision ? ('REVISION MODE: A human reviewer rejected your previous draft and provided feedback. Revise the previous draft to address the feedback below - keep parts of the previous draft the feedback does not mention, and change only what the feedback asks you to change.\\n\\nYour Previous Draft:\\nTitle: ' + $json.previousDraft.title + '\\nSteps to Reproduce: ' + $json.previousDraft.stepsToReproduce + '\\nExpected Result: ' + $json.previousDraft.expectedResult + '\\nActual Result: ' + $json.previousDraft.actualResult + '\\nSeverity: ' + $json.previousDraft.severity + ' - ' + $json.previousDraft.severityJustification + '\\n\\nHuman Reviewer Feedback:\\n' + $json.revisionComments + '\\n\\n') : '' }}Related Jira Story: {{ $('Parse Story Key & Bug Text').item.json.storyKey || 'Not specified' }}\nStory Summary: {{ $('Get Related Story').item.json.Summary || $('Get Related Story').item.json.summary || 'N/A' }}\nStory Description/AC:\n{{ $('Get Related Story').item.json.Description || $('Get Related Story').item.json.description || 'N/A' }}\n\nOriginal Raw Bug Observation (as reported by the tester):\n{{ $('Parse Story Key & Bug Text').item.json.rawBugDescription }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "You are a senior QA Analyst who converts a tester's raw, informal bug observation into a clear, well-structured bug report ready to post into Jira.\n\nYou operate in one of two modes:\n\nMODE 1 - FRESH DRAFT: You receive a raw bug observation with no previous draft. Produce a brand new structured bug report.\n\nMODE 2 - REVISION: The user message will contain a \"Previous Draft\" and \"Human Reviewer Feedback\" section. This means a human reviewer rejected your previous draft and gave specific feedback. You MUST revise the previous draft to directly address that feedback. Keep every part of the previous draft that the feedback does not mention - do not regenerate unrelated sections from scratch, and do not ignore the feedback.\n\nIn either mode, produce:\n- title: a short, specific bug title (e.g. \"Promo code input does not trim leading whitespace, causing valid codes to be rejected\") - never vague titles like \"Bug in promo code\".\n- stepsToReproduce: numbered steps as a single string (e.g. \"1. ... 2. ... 3. ...\"). If detail is missing, write the most reasonable reconstruction and note the assumption briefly in the step itself.\n- expectedResult: what should have happened, based on the related story's acceptance criteria if available, or standard reasonable behavior if not.\n- actualResult: what actually happened, as described by the tester (or carried over from the previous draft in revision mode, unless feedback says otherwise).\n- severity: one of \"Critical\" (system crash, data loss, security issue, complete blocker of core function), \"High\" (major functionality broken, no workaround), \"Medium\" (functionality impaired but workaround exists), \"Low\" (minor/cosmetic issue). Choose based on the real impact described, not just alarmist wording. In revision mode, change severity only if the feedback asks you to or clearly implies it should change.\n- severityJustification: one sentence explaining why this severity was chosen.\n\nDo not invent bug details that contradict what the tester actually reported. If critical information is still missing after revision, note that explicitly as an \"Additional Info Needed\" sentence appended at the end of stepsToReproduce, but still produce your best structured report rather than refusing.\n\nYou MUST always respond using the structured JSON output format provided to you. Never add any text outside that JSON structure."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        660,
+        0
+      ],
+      "id": "c1d2e3f4-3004-4a00-8000-000000000004",
+      "name": "Smart Bug Report Agent"
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-3.1-flash-lite",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1.2,
+      "position": [
+        660,
+        260
+      ],
+      "id": "c1d2e3f4-3005-4a00-8000-000000000005",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "7ZV2lM8NAVqObDgh",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"title\": {\n      \"type\": \"string\"\n    },\n    \"stepsToReproduce\": {\n      \"type\": \"string\"\n    },\n    \"expectedResult\": {\n      \"type\": \"string\"\n    },\n    \"actualResult\": {\n      \"type\": \"string\"\n    },\n    \"severity\": {\n      \"type\": \"string\",\n      \"enum\": [\n        \"Critical\",\n        \"High\",\n        \"Medium\",\n        \"Low\"\n      ]\n    },\n    \"severityJustification\": {\n      \"type\": \"string\"\n    }\n  },\n  \"required\": [\n    \"title\",\n    \"stepsToReproduce\",\n    \"expectedResult\",\n    \"actualResult\",\n    \"severity\",\n    \"severityJustification\"\n  ]\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [
+        840,
+        260
+      ],
+      "id": "c1d2e3f4-3006-4a00-8000-000000000006",
+      "name": "Structured Output Parser"
+    },
+    {
+      "parameters": {
+        "jsCode": "const bug = $input.item.json.output;\nconst storyKey = $('Parse Story Key & Bug Text').item.json.storyKey;\n\nlet revisionCount = 0;\ntry {\n  const prevCtx = $('Prepare Revision Context').first();\n  if (prevCtx && prevCtx.json && typeof prevCtx.json.revisionCount === 'number') {\n    revisionCount = prevCtx.json.revisionCount;\n  }\n} catch (e) {\n  revisionCount = 0;\n}\nconst maxRevisions = 3;\n\nlet description = `*Steps to Reproduce:*\\n${bug.stepsToReproduce}\\n\\n`;\ndescription += `*Expected Result:*\\n${bug.expectedResult}\\n\\n`;\ndescription += `*Actual Result:*\\n${bug.actualResult}\\n\\n`;\ndescription += `*Severity:* ${bug.severity} - ${bug.severityJustification}\\n\\n`;\nif (storyKey) {\n  description += `*Related Story:* ${storyKey}\\n`;\n}\ndescription += `\\n_This bug report was drafted by the Smart Bug Report Agent and reviewed by a human before creation._`;\n\nreturn [{\n  json: {\n    title: bug.title,\n    description,\n    stepsToReproduce: bug.stepsToReproduce,\n    expectedResult: bug.expectedResult,\n    actualResult: bug.actualResult,\n    severity: bug.severity,\n    severityJustification: bug.severityJustification,\n    storyKey,\n    revisionCount,\n    maxRevisions\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1040,
+        0
+      ],
+      "id": "c1d2e3f4-3007-4a00-8000-000000000007",
+      "name": "Prepare Jira Payload"
+    },
+    {
+      "parameters": {
+        "resume": "form",
+        "formTitle": "Review Drafted Bug Report Before Creating in Jira",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Bug Title",
+              "fieldType": "text",
+              "defaultValue": "={{ $json.title }}"
+            },
+            {
+              "fieldLabel": "Related Story",
+              "fieldType": "text",
+              "defaultValue": "={{ $json.storyKey }}"
+            },
+            {
+              "fieldLabel": "Severity",
+              "fieldType": "text",
+              "defaultValue": "={{ $json.severity }}"
+            },
+            {
+              "fieldLabel": "Steps to Reproduce",
+              "fieldType": "textarea",
+              "defaultValue": "={{ $json.stepsToReproduce }}"
+            },
+            {
+              "fieldLabel": "Expected Result",
+              "fieldType": "textarea",
+              "defaultValue": "={{ $json.expectedResult }}"
+            },
+            {
+              "fieldLabel": "Actual Result",
+              "fieldType": "textarea",
+              "defaultValue": "={{ $json.actualResult }}"
+            },
+            {
+              "fieldLabel": "Review Status",
+              "fieldType": "text",
+              "defaultValue": "={{ $json.revisionCount === 0 ? 'Original Draft' : 'Revision ' + $json.revisionCount + ' of ' + $json.maxRevisions + ' used' }}"
+            },
+            {
+              "fieldLabel": "Revision Count",
+              "fieldType": "number",
+              "defaultValue": "={{ $json.revisionCount }}"
+            },
+            {
+              "fieldLabel": "Max Revisions",
+              "fieldType": "number",
+              "defaultValue": "={{ $json.maxRevisions }}"
+            },
+            {
+              "fieldLabel": "Revision Comments",
+              "fieldType": "textarea",
+              "requiredField": false
+            },
+            {
+              "fieldLabel": "Decision",
+              "fieldType": "dropdown",
+              "defaultValue": "Approved",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "Approved"
+                  },
+                  {
+                    "option": "Rejected"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1240,
+        0
+      ],
+      "id": "c1d2e3f4-3008-4a00-8000-000000000008",
+      "name": "Wait for Human Approval",
+      "webhookId": "c1d2e3f4-3008-4a00-8000-000000000201"
+    },
+    {
+      "parameters": {
+        "jsCode": "const form = $input.item.json;\n\nconst revisionCount = Number(form['Revision Count']) || 0;\nconst maxRevisions = Number(form['Max Revisions']) || 3;\nconst comment = (form['Revision Comments'] || '').toString().trim();\nconst hasComment = comment.length > 0;\nconst canRevise = form.Decision === 'Rejected' && hasComment && revisionCount < maxRevisions;\n\nreturn [{\n  json: {\n    ...form,\n    revisionCount,\n    maxRevisions,\n    hasComment,\n    canRevise\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        0
+      ],
+      "id": "c1d2e3f4-3009-4a00-8000-000000000009",
+      "name": "Compute Revision State"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "c1d2e3f4-3010-4a00-8000-000000000210",
+              "leftValue": "={{ $json.Decision }}",
+              "rightValue": "Approved",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1640,
+        0
+      ],
+      "id": "c1d2e3f4-3010-4a00-8000-000000000010",
+      "name": "Approved?"
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.item.json;\nconst storyKey = $('Parse Story Key & Bug Text').item.json.storyKey;\n\nlet description = `*Steps to Reproduce:*\\n${data['Steps to Reproduce']}\\n\\n`;\ndescription += `*Expected Result:*\\n${data['Expected Result']}\\n\\n`;\ndescription += `*Actual Result:*\\n${data['Actual Result']}\\n\\n`;\ndescription += `*Severity:* ${data['Severity']}\\n\\n`;\nif (storyKey) {\n  description += `*Related Story:* ${storyKey}\\n`;\n}\ndescription += `\\n_This bug report was drafted by the Smart Bug Report Agent, revised ${data.revisionCount || 0} time(s), and approved by a human before creation._`;\n\nreturn [{\n  json: {\n    title: data['Bug Title'],\n    description,\n    severity: data['Severity'],\n    storyKey,\n    revisionCount: data.revisionCount || 0\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1840,
+        -140
+      ],
+      "id": "c1d2e3f4-3011-4a00-8000-000000000011",
+      "name": "Finalize Approved Bug"
+    },
+    {
+      "parameters": {
+        "resource": "issue",
+        "operation": "create",
+        "project": {
+          "__rl": true,
+          "value": "REPLACE_WITH_YOUR_PROJECT_ID",
+          "mode": "list",
+          "cachedResultName": "KAN"
+        },
+        "issueType": {
+          "__rl": true,
+          "value": "REPLACE_WITH_YOUR_BUG_ISSUE_TYPE_ID",
+          "mode": "list",
+          "cachedResultName": "Bug"
+        },
+        "summary": "={{ $json.title }}",
+        "additionalFields": {
+          "description": "={{ $json.description }}"
+        }
+      },
+      "type": "n8n-nodes-base.jira",
+      "typeVersion": 1,
+      "position": [
+        2040,
+        -140
+      ],
+      "id": "c1d2e3f4-3012-4a00-8000-000000000012",
+      "name": "Create Jira Bug",
+      "credentials": {
+        "jiraSoftwareCloudApi": {
+          "id": "REPLACE_WITH_YOUR_JIRA_CREDENTIAL_ID",
+          "name": "Jira SW Cloud account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const created = $input.item.json;\nconst finalBug = $('Finalize Approved Bug').item.json;\n\nconst bugKey = created.key || created.id || 'UNKNOWN';\n\nlet md = `**Decision:** Approved\\n\\n**New Bug Created:** ${bugKey}\\n\\n`;\nmd += `**Title:** ${finalBug.title}\\n\\n`;\nmd += `**Severity:** ${finalBug.severity}\\n\\n`;\nif (finalBug.storyKey) {\n  md += `**Related Story:** ${finalBug.storyKey}\\n\\n`;\n}\nmd += `**Revisions before approval:** ${finalBug.revisionCount}\\n\\n`;\nmd += `${finalBug.description}`;\n\nreturn [{\n  json: {\n    output: md,\n    decision: 'Approved',\n    bugKey,\n    storyKey: finalBug.storyKey,\n    revisionCount: finalBug.revisionCount\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2240,
+        -140
+      ],
+      "id": "c1d2e3f4-3013-4a00-8000-000000000013",
+      "name": "Combine Final Output (Approved)"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "c1d2e3f4-3014-4a00-8000-000000000220",
+              "leftValue": "={{ $json.canRevise }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1840,
+        160
+      ],
+      "id": "c1d2e3f4-3014-4a00-8000-000000000014",
+      "name": "Can Revise?"
+    },
+    {
+      "parameters": {
+        "jsCode": "const form = $input.item.json;\nconst payload = $('Prepare Jira Payload').item.json;\n\nconst newRevisionCount = (form.revisionCount || 0) + 1;\n\nreturn [{\n  json: {\n    isRevision: true,\n    revisionComments: form['Revision Comments'],\n    previousDraft: {\n      title: form['Bug Title'],\n      stepsToReproduce: form['Steps to Reproduce'],\n      expectedResult: form['Expected Result'],\n      actualResult: form['Actual Result'],\n      severity: form['Severity'],\n      severityJustification: payload.severityJustification || ''\n    },\n    revisionCount: newRevisionCount\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2040,
+        160
+      ],
+      "id": "c1d2e3f4-3015-4a00-8000-000000000015",
+      "name": "Prepare Revision Context"
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.item.json;\n\nlet md = `**Decision:** Rejected\\n\\n`;\n\nif (data.revisionCount >= data.maxRevisions) {\n  md += `Maximum revision attempts (${data.maxRevisions}) reached without approval. This bug report needs manual handling outside this workflow - please review and create the Jira bug manually.\\n\\n`;\n} else if (!data.hasComment) {\n  md += `The drafted bug report was rejected with no revision comments, so it was not sent back for AI revision. No issue was created in Jira.\\n\\n`;\n}\n\nmd += `**Last Drafted Title:** ${data['Bug Title']}\\n\\n`;\nmd += `**Last Drafted Severity:** ${data['Severity']}\\n\\n`;\nif (data['Related Story']) {\n  md += `**Related Story:** ${data['Related Story']}\\n\\n`;\n}\nmd += `**Revisions used:** ${data.revisionCount} of ${data.maxRevisions}\\n\\n`;\nmd += `_To try again, start a new run with a corrected or more detailed bug description._`;\n\nreturn [{\n  json: {\n    output: md,\n    decision: 'Rejected',\n    revisionCount: data.revisionCount\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2040,
+        360
+      ],
+      "id": "c1d2e3f4-3016-4a00-8000-000000000016",
+      "name": "Final Rejection Output"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When chat message received": {
+      "main": [
+        [
+          {
+            "node": "Parse Story Key & Bug Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Story Key & Bug Text": {
+      "main": [
+        [
+          {
+            "node": "Get Related Story",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Related Story": {
+      "main": [
+        [
+          {
+            "node": "Smart Bug Report Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Smart Bug Report Agent": {
+      "main": [
+        [
+          {
+            "node": "Prepare Jira Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Smart Bug Report Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Smart Bug Report Agent",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Jira Payload": {
+      "main": [
+        [
+          {
+            "node": "Wait for Human Approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait for Human Approval": {
+      "main": [
+        [
+          {
+            "node": "Compute Revision State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compute Revision State": {
+      "main": [
+        [
+          {
+            "node": "Approved?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Approved?": {
+      "main": [
+        [
+          {
+            "node": "Finalize Approved Bug",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Can Revise?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Finalize Approved Bug": {
+      "main": [
+        [
+          {
+            "node": "Create Jira Bug",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Jira Bug": {
+      "main": [
+        [
+          {
+            "node": "Combine Final Output (Approved)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Can Revise?": {
+      "main": [
+        [
+          {
+            "node": "Prepare Revision Context",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Final Rejection Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Revision Context": {
+      "main": [
+        [
+          {
+            "node": "Smart Bug Report Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "c1d2e3f4-a1b2-4700-8900-000000000001",
+  "meta": {
+    "instanceId": "d4fd626aac667aafe8853a30557889c2711020a336e42d081a06267d32694745"
+  },
+  "nodeGroups": [],
+  "id": "C1D2E3F4RevLoopBug1",
+  "tags": []
+}

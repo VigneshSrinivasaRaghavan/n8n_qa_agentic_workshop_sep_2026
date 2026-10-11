@@ -1,0 +1,788 @@
+{
+  "name": "11.3_smart_bug_assistant",
+  "nodes": [
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        32,
+        560
+      ],
+      "id": "8fbc080f-20e4-4dbc-9e6e-277d957ef2a7",
+      "name": "When chat message received",
+      "webhookId": "w3-trigger-0001"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse the chat message to extract the related Jira story key and the raw bug description.\n// Expected format: \"KAN-1: promo code field does not trim leading spaces...\"\nconst input = $json.chatInput || '';\n\nconst keyMatch = input.match(/\\b([A-Z][A-Z0-9]+-\\d+)\\b/);\nconst storyKey = keyMatch ? keyMatch[1] : null;\nconst projectKey = storyKey ? storyKey.split('-')[0] : null;\n\nlet rawBugDescription = input;\nif (keyMatch) {\n  rawBugDescription = input.replace(keyMatch[0], '').replace(/^[:\\-\\s]+/, '').trim();\n}\n\nreturn [{\n  json: {\n    storyKey,\n    projectKey,\n    rawBugDescription\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        560
+      ],
+      "id": "f3c4b6d1-36ba-4695-b0a2-64b25f53c2df",
+      "name": "Parse Story Key & Bug Text"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "issueKey": "={{ $json.storyKey }}",
+        "simplifyOutput": true,
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.jira",
+      "typeVersion": 1,
+      "position": [
+        464,
+        560
+      ],
+      "id": "6ff0d513-e5b5-4789-9a9a-12d9d1ebc758",
+      "name": "Get Related Story",
+      "credentials": {
+        "jiraSoftwareCloudApi": {
+          "id": "j4mAJaEzAaEsHVVO",
+          "name": "Jira SW Cloud account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build a broad JQL pull of recent bugs in this project (no text pre-filtering).\n// Duplicate detection is done by the AI agent against the actual candidate list below,\n// not by JQL keyword matching (JQL \"text ~\" does a strict quoted-phrase match, which is\n// too brittle to reliably catch semantic duplicates worded differently).\nconst story = $input.item.json;\nconst parsed = $('Parse Story Key & Bug Text').item.json;\n\nconst projectKey = parsed.projectKey || (story.key ? story.key.split('-')[0] : null);\n\nlet duplicateJql = 'issuetype = Bug';\nif (projectKey) duplicateJql += ` AND project = ${projectKey}`;\nduplicateJql += ' ORDER BY created DESC';\n\nreturn [{\n  json: {\n    storyKey: parsed.storyKey,\n    projectKey,\n    rawBugDescription: parsed.rawBugDescription,\n    storySummary: story.Summary || story.summary || '',\n    storyDescription: story.Description || story.description || '',\n    duplicateJql\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        688,
+        560
+      ],
+      "id": "6f0bb022-1cec-43f8-9cf4-fd22660d7805",
+      "name": "Extract Search Keywords & Build JQL"
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "limit": 20,
+        "options": {
+          "jql": "={{ $json.duplicateJql }}"
+        }
+      },
+      "type": "n8n-nodes-base.jira",
+      "typeVersion": 1,
+      "position": [
+        912,
+        560
+      ],
+      "id": "10a26958-d195-4ac1-8c5b-a5aa40a8a04e",
+      "name": "Search Possible Duplicate Bugs",
+      "alwaysOutputData": true,
+      "credentials": {
+        "jiraSoftwareCloudApi": {
+          "id": "j4mAJaEzAaEsHVVO",
+          "name": "Jira SW Cloud account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Collapse the duplicate search results into one readable block + structured list,\n// including a description excerpt so the AI can compare actual symptoms, not just titles.\n// Filter out any placeholder item (from \"Always Output Data\" firing on zero matches).\nconst items = $input.all().filter(it => it.json && (it.json.key || it.json.id));\nconst ctx = $('Extract Search Keywords & Build JQL').first().json;\n\n// Handles Atlassian Document Format (ADF) descriptions, which Jira Cloud returns\n// when simplifyOutput isn't actually flattening the response.\nfunction adfToText(node) {\n  if (!node) return '';\n  if (typeof node === 'string') return node;\n  let text = '';\n  if (node.type === 'text' && node.text) {\n    text += node.text;\n  }\n  if (Array.isArray(node.content)) {\n    for (const child of node.content) {\n      text += adfToText(child);\n      if (child.type === 'paragraph' || child.type === 'listItem' || child.type === 'heading') {\n        text += ' ';\n      }\n    }\n  }\n  return text;\n}\n\nfunction excerpt(desc) {\n  if (!desc) return '';\n  let text;\n  if (typeof desc === 'string') {\n    text = desc;\n  } else if (typeof desc === 'object') {\n    text = adfToText(desc);\n  } else {\n    text = String(desc);\n  }\n  const clean = text.replace(/\\*/g, '').replace(/\\n+/g, ' ').trim();\n  return clean.length > 300 ? clean.slice(0, 300) + '...' : clean;\n}\n\nlet candidatesText = '(No existing bugs found in this project to compare against)';\nconst candidates = [];\nif (items.length > 0) {\n  candidatesText = items.map(it => {\n    const j = it.json;\n    const f = j.fields || {};\n    const key = j.key || j.id || 'UNKNOWN';\n    // Try simplified shape first (Summary/Status/Description), then fall back to raw shape (fields.*)\n    const summary = j.Summary ?? j.summary ?? f.summary ?? '(no summary)';\n    const status = j.Status ?? j.status ?? f.status?.name ?? '';\n    const rawDescription = j.Description ?? j.description ?? f.description ?? '';\n    const description = excerpt(rawDescription);\n    candidates.push({ key, summary, status, description });\n    return `${key}: ${summary} [${status}]\\n   ${description}`;\n  }).join('\\n\\n');\n}\n\nreturn [{\n  json: {\n    ...ctx,\n    duplicateCandidatesText: candidatesText,\n    duplicateCandidates: candidates,\n    topDuplicateKey: candidates.length ? candidates[0].key : ''\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        560
+      ],
+      "id": "5179a2e5-49fb-4589-a9c8-d4415ae6442c",
+      "name": "Format Duplicate Candidates"
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-3.1-flash-lite",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1.2,
+      "position": [
+        1344,
+        880
+      ],
+      "id": "76ccc2a0-ff3b-4217-817d-9fd6ce15ee72",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "7ZV2lM8NAVqObDgh",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"title\": {\n      \"type\": \"string\"\n    },\n    \"stepsToReproduce\": {\n      \"type\": \"string\"\n    },\n    \"expectedResult\": {\n      \"type\": \"string\"\n    },\n    \"actualResult\": {\n      \"type\": \"string\"\n    },\n    \"severity\": {\n      \"type\": \"string\",\n      \"enum\": [\n        \"Critical\",\n        \"High\",\n        \"Medium\",\n        \"Low\"\n      ]\n    },\n    \"severityJustification\": {\n      \"type\": \"string\"\n    },\n    \"likelyDuplicate\": {\n      \"type\": \"boolean\"\n    },\n    \"duplicateCandidateKey\": {\n      \"type\": \"string\"\n    },\n    \"duplicateReason\": {\n      \"type\": \"string\"\n    }\n  },\n  \"required\": [\n    \"title\",\n    \"stepsToReproduce\",\n    \"expectedResult\",\n    \"actualResult\",\n    \"severity\",\n    \"severityJustification\",\n    \"likelyDuplicate\",\n    \"duplicateCandidateKey\",\n    \"duplicateReason\"\n  ]\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [
+        1344,
+        752
+      ],
+      "id": "91cb3ee0-3ed7-44c9-bbf5-1d0e156a310d",
+      "name": "Structured Output Parser"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Turn the following bug information into a structured bug report, and assess whether it is likely a duplicate of an existing bug.\n\n{{ $json.isRevision ? ('REVISION MODE: A human reviewer rejected your previous draft and provided feedback. Revise the previous draft to address the feedback below - keep parts the feedback does not mention, change only what it asks you to change.\\n\\nYour Previous Draft:\\nTitle: ' + $json.previousDraft.title + '\\nSteps to Reproduce: ' + $json.previousDraft.stepsToReproduce + '\\nExpected Result: ' + $json.previousDraft.expectedResult + '\\nActual Result: ' + $json.previousDraft.actualResult + '\\nSeverity: ' + $json.previousDraft.severity + '\\n\\nHuman Reviewer Feedback:\\n' + $json.revisionComments + '\\n\\n') : '' }}Related Jira Story: {{ $json.storyKey || 'Not specified' }}\nStory Summary: {{ $json.storySummary || 'N/A' }}\nStory Description/AC:\n{{ $json.storyDescription || 'N/A' }}\n\nOriginal Raw Bug Observation (as reported by the tester):\n{{ $json.rawBugDescription }}\n\nPossible Similar Existing Bugs (from a Jira keyword search - may or may not be true duplicates):\n{{ $json.duplicateCandidatesText }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "You are a senior QA Analyst who converts a tester's raw, informal bug observation into a clear, well-structured bug report ready to post into Jira, and who also checks it against a list of existing bugs in the same project to catch duplicates.\n\nYou operate in one of two modes:\n\nMODE 1 - FRESH DRAFT: You receive a raw bug observation with no previous draft. Produce a brand new structured bug report.\n\nMODE 2 - REVISION: The input will contain a \"Previous Draft\" and \"Human Reviewer Feedback\" section. A human reviewer rejected your previous draft and gave specific feedback. You MUST revise the previous draft to directly address that feedback - keep every part the feedback does not mention, change only what it asks you to change.\n\nIn either mode, produce:\n- title: a short, specific bug title - never vague titles like \"Bug in promo code\".\n- stepsToReproduce: numbered steps as a single string (e.g. \"1. ... 2. ... 3. ...\"). If detail is missing, write the most reasonable reconstruction and note the assumption briefly in the step itself.\n- expectedResult: what should have happened, based on the related story's acceptance criteria if available, or standard reasonable behavior if not.\n- actualResult: what actually happened, as described by the tester.\n- severity: one of \"Critical\", \"High\", \"Medium\", \"Low\". Choose based on real impact, not alarmist wording. In revision mode, change severity only if the feedback asks you to or clearly implies it.\n- severityJustification: one sentence explaining why this severity was chosen.\n- likelyDuplicate: true only if the raw observation describes the SAME underlying problem (same feature + same root-cause symptom) as one of the candidates in \"Possible Similar Existing Bugs\" below. Judge this by comparing the actual MEANING of the raw observation against each candidate's summary AND description excerpt - do not rely on matching title wording or shared keywords alone; a bug about \"promo code not trimming leading spaces\" and one with a differently-worded title describing the exact same whitespace/validation defect on the same field IS a duplicate even if the wording differs. Conversely, two bugs that merely share a feature area (e.g. both about \"promo codes\") but describe different symptoms are NOT duplicates.\n- duplicateCandidateKey: the Jira key of the one existing bug it most likely duplicates (e.g. \"KAN-7\"), or \"None\" if likelyDuplicate is false or there is no good match.\n- duplicateReason: one sentence explaining your duplicate assessment either way, referencing the specific overlapping (or non-overlapping) symptom.\n\nDo not invent bug details that contradict what the tester actually reported. If critical information is still missing, note it as an \"Additional Info Needed\" sentence appended to stepsToReproduce, but still produce your best structured report rather than refusing.\n\nYou MUST always respond using the structured JSON output format provided to you. Never add any text outside that JSON structure."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        1344,
+        560
+      ],
+      "id": "945493d9-2f10-40c9-a796-aa9809ef05e9",
+      "name": "Smart Bug Assistant Agent"
+    },
+    {
+      "parameters": {
+        "jsCode": "const bug = $input.item.json.output;\nconst dupCtx = $('Format Duplicate Candidates').first().json;\nconst storyKey = dupCtx.storyKey;\n\nlet revisionCount = 0;\ntry {\n  const prevCtx = $('Prepare Revision Context').first();\n  if (prevCtx && prevCtx.json && typeof prevCtx.json.revisionCount === 'number') {\n    revisionCount = prevCtx.json.revisionCount;\n  }\n} catch (e) {\n  revisionCount = 0;\n}\nconst maxRevisions = 3;\n\nlet description = `*Steps to Reproduce:*\\n${bug.stepsToReproduce}\\n\\n`;\ndescription += `*Expected Result:*\\n${bug.expectedResult}\\n\\n`;\ndescription += `*Actual Result:*\\n${bug.actualResult}\\n\\n`;\ndescription += `*Severity:* ${bug.severity} - ${bug.severityJustification}\\n\\n`;\nif (storyKey) description += `*Related Story:* ${storyKey}\\n`;\ndescription += `\\n_This bug report was drafted by the Smart Bug Assistant and reviewed by a human before creation._`;\n\nreturn [{\n  json: {\n    title: bug.title,\n    description,\n    stepsToReproduce: bug.stepsToReproduce,\n    expectedResult: bug.expectedResult,\n    actualResult: bug.actualResult,\n    severity: bug.severity,\n    severityJustification: bug.severityJustification,\n    likelyDuplicate: bug.likelyDuplicate,\n    duplicateCandidateKey: bug.duplicateCandidateKey,\n    duplicateReason: bug.duplicateReason,\n    duplicateCandidatesText: dupCtx.duplicateCandidatesText,\n    storyKey,\n    revisionCount,\n    maxRevisions\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1568,
+        560
+      ],
+      "id": "4ebcb2ab-8ab8-4edc-8cea-60aba74e596c",
+      "name": "Prepare Human Review Payload"
+    },
+    {
+      "parameters": {
+        "resume": "form",
+        "formTitle": "Review Drafted Bug Report Before Creating in Jira",
+        "formDescription": "=",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Bug Title",
+              "defaultValue": "={{ $json.title }}"
+            },
+            {
+              "fieldLabel": "Related Story",
+              "defaultValue": "={{ $json.storyKey }}"
+            },
+            {
+              "fieldLabel": "Severity",
+              "defaultValue": "={{ $json.severity }}"
+            },
+            {
+              "fieldLabel": "Steps to Reproduce",
+              "fieldType": "textarea",
+              "defaultValue": "={{ $json.stepsToReproduce }}"
+            },
+            {
+              "fieldLabel": "Expected Result",
+              "fieldType": "textarea",
+              "defaultValue": "={{ $json.expectedResult }}"
+            },
+            {
+              "fieldLabel": "Actual Result",
+              "fieldType": "textarea",
+              "defaultValue": "={{ $json.actualResult }}"
+            },
+            {
+              "fieldLabel": "Duplicate Assessment",
+              "defaultValue": "={{ ($json.likelyDuplicate ? '⚠️ LIKELY DUPLICATE of ' + $json.duplicateCandidateKey : 'Not a duplicate') + ' - ' + $json.duplicateReason }}"
+            },
+            {
+              "fieldLabel": "Possible Similar Existing Bugs",
+              "fieldType": "textarea",
+              "defaultValue": "={{ $json.duplicateCandidatesText }}"
+            },
+            {
+              "fieldLabel": "Duplicate Issue Key (fill in / confirm if marking as duplicate)",
+              "defaultValue": "={{ $json.duplicateCandidateKey }}"
+            },
+            {
+              "fieldLabel": "Review Status",
+              "defaultValue": "={{ $json.revisionCount === 0 ? 'Original Draft' : 'Revision ' + $json.revisionCount + ' of ' + $json.maxRevisions + ' used' }}"
+            },
+            {
+              "fieldLabel": "Revision Count",
+              "fieldType": "number",
+              "defaultValue": "={{ $json.revisionCount }}"
+            },
+            {
+              "fieldLabel": "Max Revisions",
+              "fieldType": "number",
+              "defaultValue": "={{ $json.maxRevisions }}"
+            },
+            {
+              "fieldLabel": "Revision Comments",
+              "fieldType": "textarea"
+            },
+            {
+              "fieldLabel": "Decision",
+              "fieldType": "dropdown",
+              "defaultValue": "={{ $json.likelyDuplicate ? 'Mark as Duplicate' : 'Approved' }}",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "Approved"
+                  },
+                  {
+                    "option": "Rejected"
+                  },
+                  {
+                    "option": "Mark as Duplicate"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1792,
+        560
+      ],
+      "id": "8605fa8d-4951-40ff-aa54-eecc322c7ba6",
+      "name": "Wait for Human Approval",
+      "webhookId": "w3-wait-0001"
+    },
+    {
+      "parameters": {
+        "jsCode": "const form = $input.item.json;\n\nconst revisionCount = Number(form['Revision Count']) || 0;\nconst maxRevisions = Number(form['Max Revisions']) || 3;\nconst comment = (form['Revision Comments'] || '').toString().trim();\nconst hasComment = comment.length > 0;\nconst canRevise = form.Decision === 'Rejected' && hasComment && revisionCount < maxRevisions;\n\nreturn [{\n  json: {\n    ...form,\n    revisionCount,\n    maxRevisions,\n    hasComment,\n    canRevise\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2000,
+        560
+      ],
+      "id": "665213ff-fba3-4162-b4d0-6dacafbb26c5",
+      "name": "Compute Decision State"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "cond-$json.decision-approved",
+              "leftValue": "={{ $json.Decision }}",
+              "rightValue": "Approved",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2224,
+        560
+      ],
+      "id": "f03a320e-275b-40e2-a327-85b19913ad67",
+      "name": "Approved?"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "cond-$json.decision-mark-as-duplicate",
+              "leftValue": "={{ $json.Decision }}",
+              "rightValue": "Mark as Duplicate",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2448,
+        768
+      ],
+      "id": "0111a62e-598e-419a-8e9e-7c7388775727",
+      "name": "Marked As Duplicate?"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "cond-$json.canrevise-true",
+              "leftValue": "={{ $json.canRevise }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2672,
+        960
+      ],
+      "id": "1c0e21aa-39b2-412a-8e7c-0e8a374e1733",
+      "name": "Can Revise?"
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.item.json;\nconst storyKey = data['Related Story'];\n\nlet description = `*Steps to Reproduce:*\\n${data['Steps to Reproduce']}\\n\\n`;\ndescription += `*Expected Result:*\\n${data['Expected Result']}\\n\\n`;\ndescription += `*Actual Result:*\\n${data['Actual Result']}\\n\\n`;\ndescription += `*Severity:* ${data['Severity']}\\n\\n`;\nif (storyKey) description += `*Related Story:* ${storyKey}\\n`;\ndescription += `\\n_This bug report was drafted by the Smart Bug Assistant, revised ${data.revisionCount || 0} time(s), and approved by a human before creation._`;\n\nreturn [{\n  json: {\n    title: data['Bug Title'],\n    description,\n    severity: data['Severity'],\n    storyKey,\n    revisionCount: data.revisionCount || 0\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2224,
+        320
+      ],
+      "id": "a42ac296-4466-4192-93c4-bde0bd1f4e4a",
+      "name": "Finalize Approved Bug"
+    },
+    {
+      "parameters": {
+        "project": {
+          "__rl": true,
+          "value": "10001",
+          "mode": "list",
+          "cachedResultName": "Demo Project"
+        },
+        "issueType": {
+          "__rl": true,
+          "value": "10012",
+          "mode": "list",
+          "cachedResultName": "Bug"
+        },
+        "summary": "={{ $json.title }}",
+        "additionalFields": {
+          "description": "={{ $json.description }}"
+        }
+      },
+      "type": "n8n-nodes-base.jira",
+      "typeVersion": 1,
+      "position": [
+        2448,
+        320
+      ],
+      "id": "b1b201b0-434f-4278-87c8-8cd924c23fa1",
+      "name": "Create Jira Bug",
+      "credentials": {
+        "jiraSoftwareCloudApi": {
+          "id": "j4mAJaEzAaEsHVVO",
+          "name": "Jira SW Cloud account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const created = $input.item.json;\nconst finalBug = $('Finalize Approved Bug').item.json;\n\nconst bugKey = created.key || created.id || 'UNKNOWN';\n\nlet md = `**Decision:** Approved\\n\\n**New Bug Created:** ${bugKey}\\n\\n`;\nmd += `**Title:** ${finalBug.title}\\n\\n`;\nmd += `**Severity:** ${finalBug.severity}\\n\\n`;\nif (finalBug.storyKey) md += `**Related Story:** ${finalBug.storyKey}\\n\\n`;\nmd += `**Revisions before approval:** ${finalBug.revisionCount}\\n\\n`;\nmd += `${finalBug.description}`;\n\nreturn [{ json: { output: md, decision: 'Approved', bugKey, storyKey: finalBug.storyKey, revisionCount: finalBug.revisionCount } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2672,
+        320
+      ],
+      "id": "e75c678a-5300-4e3a-9b6d-5d2dfe469935",
+      "name": "Combine Final Output (Created)"
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.item.json;\nconst dupKey = (data['Duplicate Issue Key (fill in / confirm if marking as duplicate)'] || '').trim();\n\nlet comment = `*Possible Duplicate Reported*\\n\\n`;\ncomment += `A tester reported a bug that a human reviewer judged as a likely duplicate of this issue.\\n\\n`;\ncomment += `*Drafted Title:* ${data['Bug Title']}\\n\\n`;\ncomment += `*Steps to Reproduce:*\\n${data['Steps to Reproduce']}\\n\\n`;\ncomment += `*Expected Result:*\\n${data['Expected Result']}\\n\\n`;\ncomment += `*Actual Result:*\\n${data['Actual Result']}\\n\\n`;\ncomment += `*Severity:* ${data['Severity']}\\n\\n`;\nif (data['Related Story']) comment += `*Related Story:* ${data['Related Story']}\\n\\n`;\ncomment += `_No new bug was created - this was linked as a duplicate by a human reviewer via the Smart Bug Assistant._`;\n\nreturn [{ json: { duplicateIssueKey: dupKey, commentBody: comment, originalTitle: data['Bug Title'] } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2448,
+        768
+      ],
+      "id": "e8b03ef6-4f81-4048-bbfb-c69a977eaab3",
+      "name": "Prepare Duplicate Link Comment"
+    },
+    {
+      "parameters": {
+        "resource": "issueComment",
+        "issueKey": "={{ $json.duplicateIssueKey }}",
+        "comment": "={{ $json.commentBody }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.jira",
+      "typeVersion": 1,
+      "position": [
+        2672,
+        768
+      ],
+      "id": "9f6bf80c-eb7b-48a0-a87c-1eb7a2d3a524",
+      "name": "Add Comment to Existing Bug",
+      "credentials": {
+        "jiraSoftwareCloudApi": {
+          "id": "j4mAJaEzAaEsHVVO",
+          "name": "Jira SW Cloud account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const prep = $('Prepare Duplicate Link Comment').item.json;\n\nlet md = `**Decision:** Marked as Duplicate\\n\\n`;\nmd += `**Linked to Existing Bug:** ${prep.duplicateIssueKey}\\n\\n`;\nmd += `**Drafted Title (not created):** ${prep.originalTitle}\\n\\n`;\nmd += `_A comment referencing this report was added to ${prep.duplicateIssueKey} instead of creating a new bug._`;\n\nreturn [{ json: { output: md, decision: 'Marked as Duplicate', duplicateIssueKey: prep.duplicateIssueKey } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2880,
+        768
+      ],
+      "id": "9f99b5c1-3ed9-4053-9156-99dad379c8d1",
+      "name": "Combine Final Output (Linked As Duplicate)"
+    },
+    {
+      "parameters": {
+        "jsCode": "const form = $input.item.json;\nconst dupCtx = $('Format Duplicate Candidates').first().json;\n\nconst newRevisionCount = (form.revisionCount || 0) + 1;\n\nreturn [{\n  json: {\n    ...dupCtx,\n    isRevision: true,\n    revisionComments: form['Revision Comments'],\n    previousDraft: {\n      title: form['Bug Title'],\n      stepsToReproduce: form['Steps to Reproduce'],\n      expectedResult: form['Expected Result'],\n      actualResult: form['Actual Result'],\n      severity: form['Severity']\n    },\n    revisionCount: newRevisionCount\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2880,
+        960
+      ],
+      "id": "4970e698-b8ec-4b02-bd86-5a0f67bec679",
+      "name": "Prepare Revision Context"
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.item.json;\n\nlet md = `**Decision:** Rejected\\n\\n`;\n\nif (data.revisionCount >= data.maxRevisions) {\n  md += `Maximum revision attempts (${data.maxRevisions}) reached without approval. This bug report needs manual handling outside this workflow.\\n\\n`;\n} else if (!data.hasComment) {\n  md += `The drafted bug report was rejected with no revision comments, so it was not sent back for AI revision. No issue was created in Jira.\\n\\n`;\n}\n\nmd += `**Last Drafted Title:** ${data['Bug Title']}\\n\\n`;\nmd += `**Last Drafted Severity:** ${data['Severity']}\\n\\n`;\nif (data['Related Story']) md += `**Related Story:** ${data['Related Story']}\\n\\n`;\nmd += `**Revisions used:** ${data.revisionCount} of ${data.maxRevisions}\\n\\n`;\nmd += `_To try again, start a new run with a corrected or more detailed bug description._`;\n\nreturn [{ json: { output: md, decision: 'Rejected', revisionCount: data.revisionCount } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2880,
+        1168
+      ],
+      "id": "e2994aae-6ba2-4bf1-8255-e1600a280b80",
+      "name": "Final Rejection Output"
+    },
+    {
+      "parameters": {
+        "content": "## Workflow 3: Smart Bug Assistant\n\n**Flow:** Rough tester note -> link to related story -> search Jira for possibly-similar existing bugs (JQL keyword search) -> AI enriches into a structured bug report AND assesses duplicate likelihood -> human reviews everything in one form -> Approve creates the Jira Bug, Mark as Duplicate adds a comment on the existing bug instead (no new issue), Reject-with-comments loops back through the SAME agent/Wait node for another round (same single-loop pattern validated in Workflow 2), capped at 3 attempts.\n\n**Duplicate search caveat:** the JQL keyword search is a simple heuristic (first few significant words from the raw note) - it will surface candidates, not guarantee true duplicates. The AI's likelyDuplicate/duplicateCandidateKey assessment and the human's final call are what actually decide.",
+        "height": 320,
+        "width": 760,
+        "color": 5
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "17cda816-6238-4173-82c2-9c3edc1fa755",
+      "name": "Overview Note"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When chat message received": {
+      "main": [
+        [
+          {
+            "node": "Parse Story Key & Bug Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Story Key & Bug Text": {
+      "main": [
+        [
+          {
+            "node": "Get Related Story",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Related Story": {
+      "main": [
+        [
+          {
+            "node": "Extract Search Keywords & Build JQL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Search Keywords & Build JQL": {
+      "main": [
+        [
+          {
+            "node": "Search Possible Duplicate Bugs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search Possible Duplicate Bugs": {
+      "main": [
+        [
+          {
+            "node": "Format Duplicate Candidates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Duplicate Candidates": {
+      "main": [
+        [
+          {
+            "node": "Smart Bug Assistant Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Smart Bug Assistant Agent": {
+      "main": [
+        [
+          {
+            "node": "Prepare Human Review Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Human Review Payload": {
+      "main": [
+        [
+          {
+            "node": "Wait for Human Approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait for Human Approval": {
+      "main": [
+        [
+          {
+            "node": "Compute Decision State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compute Decision State": {
+      "main": [
+        [
+          {
+            "node": "Approved?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Approved?": {
+      "main": [
+        [
+          {
+            "node": "Finalize Approved Bug",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Marked As Duplicate?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Finalize Approved Bug": {
+      "main": [
+        [
+          {
+            "node": "Create Jira Bug",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Jira Bug": {
+      "main": [
+        [
+          {
+            "node": "Combine Final Output (Created)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Marked As Duplicate?": {
+      "main": [
+        [
+          {
+            "node": "Prepare Duplicate Link Comment",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Can Revise?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Duplicate Link Comment": {
+      "main": [
+        [
+          {
+            "node": "Add Comment to Existing Bug",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add Comment to Existing Bug": {
+      "main": [
+        [
+          {
+            "node": "Combine Final Output (Linked As Duplicate)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Can Revise?": {
+      "main": [
+        [
+          {
+            "node": "Prepare Revision Context",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Final Rejection Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Revision Context": {
+      "main": [
+        [
+          {
+            "node": "Smart Bug Assistant Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Smart Bug Assistant Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Smart Bug Assistant Agent",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true
+  },
+  "versionId": "6415589b-750d-44e0-8b65-e77bb072eb54",
+  "meta": {
+    "instanceId": "d4fd626aac667aafe8853a30557889c2711020a336e42d081a06267d32694745"
+  },
+  "nodeGroups": [],
+  "id": "GssvmIsaitVlhlC8",
+  "tags": []
+}
