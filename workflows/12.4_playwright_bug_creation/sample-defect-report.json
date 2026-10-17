@@ -1,0 +1,41 @@
+{
+  "config": {},
+  "suites": [
+    {
+      "title": "Cart",
+      "file": "tests/cart.spec.ts",
+      "specs": [
+        {
+          "title": "should apply 10% discount coupon correctly",
+          "tests": [
+            {
+              "projectName": "chromium",
+              "status": "unexpected",
+              "results": [
+                {
+                  "retry": 0,
+                  "status": "failed",
+                  "duration": 3012,
+                  "error": {
+                    "message": "Expect: expected cart total to be 90.00 but received 100.00",
+                    "stack": "Error: expect(received).toBe(expected)\n\nExpected: 90\nReceived: 100\n    at tests/cart.spec.ts:27:9"
+                  }
+                },
+                {
+                  "retry": 1,
+                  "status": "failed",
+                  "duration": 2890,
+                  "error": {
+                    "message": "Expect: expected cart total to be 90.00 but received 100.00",
+                    "stack": "Error: expect(received).toBe(expected)\n\nExpected: 90\nReceived: 100\n    at tests/cart.spec.ts:27:9"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "suites": []
+    }
+  ]
+}

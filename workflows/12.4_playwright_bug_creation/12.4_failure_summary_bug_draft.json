@@ -1,0 +1,699 @@
+{
+  "name": "12.4_failure_summary_bug_draft",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## WORKFLOW - FAILURE SUMMARY GENERATOR + BUG DRAFT FROM TEST FAILURE\n\nUpload ONE Playwright JSON report (same as the Failure Analysis workflow).\n\nPipeline: Extract + parse report -> AI Failure Analysis Agent classifies the\nfailure (Flaky / AppDefect / AutomationDefect / DataIssue / EnvironmentIssue)\n-> GATE: only AppDefect or AutomationDefect continue (both are real bugs,\njust owned by different teams - product vs automation) -> Failure Summary\nGenerator turns the evidence into a structured summary -> Bug Draft Generator\ndrafts a Jira-ready bug (same structure as your existing Smart Bug Report\nAgent) -> human reviews via a form link (Approved/Rejected) -> only on\nApproved does it actually create the Jira bug.\n\nFlaky / DataIssue / EnvironmentIssue failures STOP at the gate with an\nexplanation instead of becoming a bug - that is intentional: don't file\nproduct bugs for flaky tests, stale test data, or infra blips.\n\nReuses the exact \"Wait for Human Approval\" (form) + \"Approved?\" + \"Create\nJira Bug\" pattern from your existing 9.3 Jira Bug Creation workflow, so it\nshould feel immediately familiar.\n\nSample reports to demo with:\n- sample-defect-report.json -> AppDefect -> should proceed to bug draft\n- sample-flaky-report.json -> Flaky -> should stop at the gate, no bug drafted",
+        "height": 440,
+        "width": 640,
+        "color": 6
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "d4444444-0000-4000-8000-000000000401",
+      "name": "Sticky Note - Overview"
+    },
+    {
+      "parameters": {
+        "options": {
+          "allowFileUploads": true
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        48,
+        520
+      ],
+      "id": "d4444444-0000-4000-8000-000000000402",
+      "name": "When chat message received",
+      "webhookId": "f1a2b3c4-1204-4a00-8000-000000001204"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Same proven pattern as the Code Reviewer / Failure Analysis workflows.\nconst item = $input.item;\nconst binary = item.binary || {};\nconst keys = Object.keys(binary);\nconst chatInput = item.json.chatInput || '';\n\nreturn keys.map((key) => ({\n  json: { fileName: binary[key].fileName || key, chatInput },\n  binary: { data: binary[key] }\n}));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        280,
+        520
+      ],
+      "id": "d4444444-0000-4000-8000-000000000403",
+      "name": "Split Attached File Into Item"
+    },
+    {
+      "parameters": {
+        "operation": "text",
+        "binaryPropertyName": "data",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        500,
+        520
+      ],
+      "id": "d4444444-0000-4000-8000-000000000404",
+      "name": "Extract Report Text"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Same parsing logic as the Failure Analysis workflow: flattens all tests\n// across nested suites, prefers a \"flaky\" test, else the first \"unexpected\"\n// (consistently-failing) test, and builds a human-readable evidence summary.\nconst text = $json.data ?? $json.text ?? $json.fileText ?? '';\n\nlet report;\ntry {\n  report = JSON.parse(text);\n} catch (e) {\n  return [{\n    json: {\n      noFailureFound: true,\n      evidenceSummary: 'The uploaded file is not valid JSON. Please upload a Playwright JSON reporter output file (e.g. results.json).'\n    }\n  }];\n}\n\nfunction collectTests(suites, parentFile, out) {\n  for (const suite of (suites || [])) {\n    const currentFile = suite.file || parentFile;\n    for (const spec of (suite.specs || [])) {\n      for (const test of (spec.tests || [])) {\n        out.push({\n          title: spec.title,\n          file: currentFile,\n          projectName: test.projectName,\n          status: test.status,\n          results: (test.results || []).map((r) => ({\n            retry: r.retry,\n            status: r.status,\n            duration: r.duration,\n            errorMessage: (r.error && r.error.message) || (r.errors && r.errors[0] && r.errors[0].message) || null,\n            errorStack: (r.error && r.error.stack) || (r.errors && r.errors[0] && r.errors[0].stack) || null\n          }))\n        });\n      }\n    }\n    collectTests(suite.suites, currentFile, out);\n  }\n  return out;\n}\n\nconst allTests = collectTests(report.suites, null, []);\n\nlet target = allTests.find((t) => t.status === 'flaky');\nif (!target) target = allTests.find((t) => t.status === 'unexpected');\n\nif (!target) {\n  return [{\n    json: {\n      noFailureFound: true,\n      evidenceSummary: 'No failing or flaky test was found in the uploaded report - every test passed on its first attempt. Nothing to summarize.'\n    }\n  }];\n}\n\nlet evidenceSummary = `Test: ${target.title}\\nFile: ${target.file}\\nProject: ${target.projectName}\\nPlaywright's final computed status for this test: ${target.status}\\n\\nAttempt-by-attempt results:\\n`;\n\ntarget.results.forEach((r) => {\n  evidenceSummary += `- Retry ${r.retry}: ${r.status} (duration ${r.duration}ms)`;\n  if (r.errorMessage) evidenceSummary += `\\n  Error message: ${r.errorMessage}`;\n  evidenceSummary += `\\n`;\n});\n\nreturn [{\n  json: {\n    noFailureFound: false,\n    testTitle: target.title,\n    filePath: target.file,\n    evidenceSummary\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        520
+      ],
+      "id": "d4444444-0000-4000-8000-000000000405",
+      "name": "Parse Playwright JSON Report"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "d4444444-cond-0000-8000-000000000406",
+              "leftValue": "={{ $json.noFailureFound }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        940,
+        520
+      ],
+      "id": "d4444444-0000-4000-8000-000000000406",
+      "name": "Any Failure Found?"
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { output: $json.evidenceSummary } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1160,
+        320
+      ],
+      "id": "d4444444-0000-4000-8000-000000000407",
+      "name": "No Failure To Summarize"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Classify this test failure using the evidence provided.",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "=You are a senior QA engineer specializing in root-cause triage of automated test failures.\n\nYou will receive EVIDENCE extracted directly from a Playwright JSON test report for ONE test, including:\n- The test title and file.\n- Playwright's own computed final status for this test (\"unexpected\" = failed with no successful retry; \"flaky\" = failed on an earlier attempt but passed on a later retry).\n- A full attempt-by-attempt breakdown: for each retry, the pass/fail status, duration, and (if failed) the exact error message.\n\nClassify this test failure into EXACTLY ONE of these 5 categories, based ONLY on the evidence given - never guess or default to the most common category without citing specific evidence from the data:\n\n1. \"Flaky\" - the test's outcome was inconsistent across identical attempts (e.g. failed on attempt 0, then passed cleanly on a retry with no code/data/environment change). Playwright's own \"flaky\" status on the test is itself a primary piece of evidence, but you must still explain WHY using the attempt data.\n2. \"AppDefect\" - the error reflects a genuine application/business-logic problem that was CONSISTENT across all attempts (same or materially same failure every retry - NOT flaky).\n3. \"AutomationDefect\" - the error is caused by the test code/framework itself (e.g. a wrong/outdated locator, incorrect wait strategy, stale element handling, bad assertion logic) rather than genuine app behavior, and the error is CONSISTENT across all attempts.\n4. \"DataIssue\" - the error indicates a test-data problem (e.g. \"duplicate key\", \"record already exists\", dependent on stale seeded data) rather than a code or app defect.\n5. \"EnvironmentIssue\" - the error indicates an infrastructure/environment problem (e.g. connection refused, DNS failure, timeout connecting to a URL, certificate error) unrelated to the application's business logic or the test's own code.\n\nRULES:\n- If the attempts show an inconsistent outcome (a failing attempt followed by a clean pass with nothing else changed), that is strong evidence for \"Flaky\".\n- If ALL attempts failed with the exact same (or materially same) error, it is NOT flaky - classify it using categories 2-5 based on what the error message/stack indicates.\n- You MUST list the exact evidenceSignals (direct quotes or precise paraphrases from the attempt data) that led to your classification.\n- Assign confidence: \"High\" if the evidence clearly and unambiguously supports one category, \"Medium\" if reasonable but some ambiguity exists, \"Low\" if the evidence is thin or contradictory.\n\nYou MUST always respond using the structured JSON output format provided to you. Never add any explanation text outside that JSON.\n\nEVIDENCE PACKAGE:\n{{ $json.evidenceSummary }}\n"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        1160,
+        560
+      ],
+      "id": "d4444444-0000-4000-8000-000000000408",
+      "name": "AI Failure Analysis Agent"
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\"type\": \"object\", \"properties\": {\"testTitle\": {\"type\": \"string\"}, \"filePath\": {\"type\": \"string\"}, \"classification\": {\"type\": \"string\", \"enum\": [\"Flaky\", \"AppDefect\", \"AutomationDefect\", \"DataIssue\", \"EnvironmentIssue\"]}, \"confidence\": {\"type\": \"string\", \"enum\": [\"High\", \"Medium\", \"Low\"]}, \"evidenceSignals\": {\"type\": \"array\", \"items\": {\"type\": \"string\"}}, \"reasoning\": {\"type\": \"string\"}}, \"required\": [\"testTitle\", \"filePath\", \"classification\", \"confidence\", \"evidenceSignals\", \"reasoning\"]}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [
+        1160,
+        840
+      ],
+      "id": "d4444444-0000-4000-8000-000000000409",
+      "name": "Structured Output Parser (Analysis)"
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-3.1-flash-lite",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1.2,
+      "position": [
+        900,
+        840
+      ],
+      "id": "d4444444-0000-4000-8000-00000000040a",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "7ZV2lM8NAVqObDgh",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "d4444444-cond-0000-8000-00000000040b1",
+              "leftValue": "={{ $json.output.classification }}",
+              "rightValue": "AppDefect",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "d4444444-cond-0000-8000-00000000040b2",
+              "leftValue": "={{ $json.output.classification }}",
+              "rightValue": "AutomationDefect",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1400,
+        560
+      ],
+      "id": "d4444444-0000-4000-8000-00000000040b",
+      "name": "Is Bug-Worthy? (AppDefect or AutomationDefect)"
+    },
+    {
+      "parameters": {
+        "jsCode": "const result = $json.output;\n\nlet md = `### Failure Analysis Report\\n\\n`;\nmd += `**Test:** ${result.testTitle}\\n`;\nmd += `**File:** ${result.filePath}\\n\\n`;\nmd += `**Classification:** ${result.classification}\\n`;\nmd += `**Confidence:** ${result.confidence}\\n\\n`;\nmd += `**Evidence Signals Cited:**\\n`;\nfor (const sig of (result.evidenceSignals || [])) md += `- ${sig}\\n`;\nmd += `\\n**Reasoning:** ${result.reasoning}\\n\\n`;\n\nconst recommendations = {\n  Flaky: 'Recommend quarantining/stabilizing this test (e.g. a proper wait or retry strategy) - do NOT file a product bug for this.',\n  DataIssue: 'Recommend fixing or resetting the underlying test data/fixtures - this is not a product or automation code defect.',\n  EnvironmentIssue: 'Recommend checking test environment/infrastructure health before re-running - this is not a product or automation code defect.'\n};\n\nmd += `**Why no bug was drafted:** This failure was classified as \"${result.classification}\", not a defect in the application or the automation code. ${recommendations[result.classification] || ''}`;\n\nreturn [{ json: { output: md } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1640,
+        320
+      ],
+      "id": "d4444444-0000-4000-8000-00000000040c",
+      "name": "Not Bug-Worthy Output"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Summarize this classified test failure for a bug report.",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "=You are a senior QA engineer who converts a classified test failure (with its raw evidence) into a clear, structured failure summary - the bridge between automated analysis and a human-readable bug report.\n\nYou are given:\n- The test's title and file.\n- Its classification from a prior analysis step: either \"AppDefect\" (a genuine application/business-logic problem) or \"AutomationDefect\" (a problem in the test automation code itself, e.g. a bad locator or wrong wait strategy). Both are being summarized here because both are legitimate bugs worth reporting, just owned by different teams (product team vs automation team).\n- The classification's reasoning and cited evidence signals.\n- The raw attempt-by-attempt evidence (retry/status/duration/error).\n\nProduce:\n- testTitle, filePath: carry through exactly as given.\n- bugType: \"Application Defect\" if classification was AppDefect, or \"Automation Defect\" if classification was AutomationDefect.\n- summaryNarrative: 2-4 sentences in plain language explaining what happened.\n- expectedBehavior: what should have happened (infer reasonably from the test title/assertion implied by the error).\n- actualBehavior: what actually happened, grounded in the exact error message from the evidence.\n- reproStepsHint: a best-effort reconstruction of how to reproduce this, based on the test title and file name - explicitly note if you are inferring/assuming details due to limited information.\n- environmentNotes: any environment/browser/project details visible in the evidence, or \"Not specified\" if none.\n\nDo not invent specifics not supported by the evidence. You MUST always respond using the structured JSON output format provided to you. Never add any text outside that JSON.\n\nCLASSIFICATION: {{ $json.output.classification }}\nCONFIDENCE: {{ $json.output.confidence }}\nCLASSIFICATION REASONING: {{ $json.output.reasoning }}\n\nRAW EVIDENCE:\n{{ $('Parse Playwright JSON Report').item.json.evidenceSummary }}\n"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        1640,
+        560
+      ],
+      "id": "d4444444-0000-4000-8000-00000000040d",
+      "name": "Failure Summary Generator Agent"
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\"type\": \"object\", \"properties\": {\"testTitle\": {\"type\": \"string\"}, \"filePath\": {\"type\": \"string\"}, \"bugType\": {\"type\": \"string\", \"enum\": [\"Application Defect\", \"Automation Defect\"]}, \"summaryNarrative\": {\"type\": \"string\"}, \"expectedBehavior\": {\"type\": \"string\"}, \"actualBehavior\": {\"type\": \"string\"}, \"reproStepsHint\": {\"type\": \"string\"}, \"environmentNotes\": {\"type\": \"string\"}}, \"required\": [\"testTitle\", \"filePath\", \"bugType\", \"summaryNarrative\", \"expectedBehavior\", \"actualBehavior\", \"reproStepsHint\", \"environmentNotes\"]}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [
+        1640,
+        840
+      ],
+      "id": "d4444444-0000-4000-8000-00000000040e",
+      "name": "Structured Output Parser (Summary)"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Draft a Jira-ready bug report from this failure summary.",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "=You are a senior QA Analyst who converts a structured failure summary into a bug report ready to post into Jira.\n\nUsing the failure summary given, produce:\n- title: a short, specific bug title - never vague (e.g. \"Checkout fails intermittently\" is too vague; say exactly what fails and under what condition).\n- bugType: carry through exactly as given (\"Application Defect\" or \"Automation Defect\").\n- stepsToReproduce: numbered steps as a single string, reconstructing how to reproduce this based on the summary's reproStepsHint - keep any noted assumptions.\n- expectedResult: from the summary's expectedBehavior.\n- actualResult: from the summary's actualBehavior.\n- severity: one of \"Critical\" (system crash/data loss/security/complete blocker), \"High\" (major functionality broken, no workaround), \"Medium\" (functionality impaired but workaround exists), \"Low\" (minor/cosmetic). If bugType is \"Automation Defect\", judge severity by the impact on test suite reliability/coverage, not the live application.\n- severityJustification: one sentence explaining why this severity was chosen.\n\nYou MUST always respond using the structured JSON output format provided to you. Never add any text outside that JSON.\n\nFAILURE SUMMARY:\n{{ JSON.stringify($json.output) }}\n"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        1880,
+        560
+      ],
+      "id": "d4444444-0000-4000-8000-00000000040f",
+      "name": "Bug Draft Generator Agent"
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\"type\": \"object\", \"properties\": {\"title\": {\"type\": \"string\"}, \"bugType\": {\"type\": \"string\", \"enum\": [\"Application Defect\", \"Automation Defect\"]}, \"stepsToReproduce\": {\"type\": \"string\"}, \"expectedResult\": {\"type\": \"string\"}, \"actualResult\": {\"type\": \"string\"}, \"severity\": {\"type\": \"string\", \"enum\": [\"Critical\", \"High\", \"Medium\", \"Low\"]}, \"severityJustification\": {\"type\": \"string\"}}, \"required\": [\"title\", \"bugType\", \"stepsToReproduce\", \"expectedResult\", \"actualResult\", \"severity\", \"severityJustification\"]}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [
+        1880,
+        840
+      ],
+      "id": "d4444444-0000-4000-8000-000000000410",
+      "name": "Structured Output Parser (Bug Draft)"
+    },
+    {
+      "parameters": {
+        "jsCode": "const bug = $('Bug Draft Generator Agent').item.json.output;\nconst analysis = $('AI Failure Analysis Agent').item.json.output;\n\nlet description = `*Bug Type:* ${bug.bugType}\\n\\n`;\ndescription += `*Steps to Reproduce:*\\n${bug.stepsToReproduce}\\n\\n`;\ndescription += `*Expected Result:*\\n${bug.expectedResult}\\n\\n`;\ndescription += `*Actual Result:*\\n${bug.actualResult}\\n\\n`;\ndescription += `*Severity:* ${bug.severity} - ${bug.severityJustification}\\n\\n`;\ndescription += `*Failure Classification:* ${analysis.classification} (confidence: ${analysis.confidence})\\n`;\ndescription += `*Classification Evidence:*\\n`;\nfor (const sig of (analysis.evidenceSignals || [])) {\n  description += `- ${sig}\\n`;\n}\ndescription += `\\n_This bug was drafted automatically from a Playwright test failure, classified and summarized by AI, and reviewed by a human before creation._`;\n\nreturn [{\n  json: {\n    title: bug.title,\n    bugType: bug.bugType,\n    description,\n    stepsToReproduce: bug.stepsToReproduce,\n    expectedResult: bug.expectedResult,\n    actualResult: bug.actualResult,\n    severity: bug.severity,\n    severityJustification: bug.severityJustification,\n    testTitle: analysis.testTitle,\n    filePath: analysis.filePath\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2120,
+        560
+      ],
+      "id": "d4444444-0000-4000-8000-000000000411",
+      "name": "Prepare Jira Payload"
+    },
+    {
+      "parameters": {
+        "resume": "form",
+        "formTitle": "Review Drafted Bug Before Creating in Jira",
+        "formDescription": "=",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Bug Title",
+              "defaultValue": "={{ $json.title }}"
+            },
+            {
+              "fieldLabel": "Bug Type",
+              "defaultValue": "={{ $json.bugType }}"
+            },
+            {
+              "fieldLabel": "Severity",
+              "defaultValue": "={{ $json.severity }}"
+            },
+            {
+              "fieldLabel": "Steps to Reproduce",
+              "fieldType": "textarea",
+              "defaultValue": "={{ $json.stepsToReproduce }}"
+            },
+            {
+              "fieldLabel": "Expected Result",
+              "fieldType": "textarea",
+              "defaultValue": "={{ $json.expectedResult }}"
+            },
+            {
+              "fieldLabel": "Actual Result",
+              "fieldType": "textarea",
+              "defaultValue": "={{ $json.actualResult }}"
+            },
+            {
+              "fieldLabel": "Decision",
+              "fieldType": "dropdown",
+              "defaultValue": "Approved",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "Approved"
+                  },
+                  {
+                    "option": "Rejected"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        2360,
+        560
+      ],
+      "id": "d4444444-0000-4000-8000-000000000412",
+      "name": "Wait for Human Approval",
+      "webhookId": "a1b2c3d4-1204-4a00-8000-000000001205"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "d4444444-cond-0000-8000-000000000413",
+              "leftValue": "={{ $json.Decision }}",
+              "rightValue": "Approved",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2600,
+        560
+      ],
+      "id": "d4444444-0000-4000-8000-000000000413",
+      "name": "Approved?"
+    },
+    {
+      "parameters": {
+        "project": {
+          "__rl": true,
+          "value": "10001",
+          "mode": "list",
+          "cachedResultName": "Demo Project"
+        },
+        "issueType": {
+          "__rl": true,
+          "value": "10012",
+          "mode": "list",
+          "cachedResultName": "Bug"
+        },
+        "summary": "={{ $('Prepare Jira Payload').item.json.title }}",
+        "additionalFields": {
+          "description": "={{ $('Prepare Jira Payload').item.json.description }}"
+        }
+      },
+      "type": "n8n-nodes-base.jira",
+      "typeVersion": 1,
+      "position": [
+        2840,
+        460
+      ],
+      "id": "d4444444-0000-4000-8000-000000000414",
+      "name": "Create Jira Bug",
+      "credentials": {
+        "jiraSoftwareCloudApi": {
+          "id": "j4mAJaEzAaEsHVVO",
+          "name": "Jira SW Cloud account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const created = $input.item.json;\nconst payload = $('Prepare Jira Payload').item.json;\nconst bugKey = created.key || created.id || 'UNKNOWN';\n\nlet md = `**Decision:** Approved\\n\\n**New Bug Created:** ${bugKey}\\n\\n`;\nmd += `**Bug Type:** ${payload.bugType}\\n\\n`;\nmd += `**Title:** ${payload.title}\\n\\n`;\nmd += `**Severity:** ${payload.severity}\\n\\n`;\nmd += `${payload.description}`;\n\nreturn [{ json: { output: md, decision: 'Approved', bugKey } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3080,
+        460
+      ],
+      "id": "d4444444-0000-4000-8000-000000000415",
+      "name": "Combine Final Output (Approved)"
+    },
+    {
+      "parameters": {
+        "jsCode": "const payload = $('Prepare Jira Payload').item.json;\n\nlet md = `**Decision:** Rejected\\n\\n`;\nmd += `The drafted bug report for \"${payload.title}\" was rejected during human review. No issue was created in Jira.\\n\\n`;\nmd += `**Bug Type:** ${payload.bugType}\\n\\n`;\nmd += `**Drafted Severity:** ${payload.severity}\\n\\n`;\nmd += `_To create this bug, re-run the workflow with a corrected or more detailed failure report._`;\n\nreturn [{ json: { output: md, decision: 'Rejected' } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2840,
+        680
+      ],
+      "id": "d4444444-0000-4000-8000-000000000416",
+      "name": "Combine Final Output (Rejected)"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When chat message received": {
+      "main": [
+        [
+          {
+            "node": "Split Attached File Into Item",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Attached File Into Item": {
+      "main": [
+        [
+          {
+            "node": "Extract Report Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Report Text": {
+      "main": [
+        [
+          {
+            "node": "Parse Playwright JSON Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Playwright JSON Report": {
+      "main": [
+        [
+          {
+            "node": "Any Failure Found?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Any Failure Found?": {
+      "main": [
+        [
+          {
+            "node": "No Failure To Summarize",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "AI Failure Analysis Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Failure Analysis Agent": {
+      "main": [
+        [
+          {
+            "node": "Is Bug-Worthy? (AppDefect or AutomationDefect)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser (Analysis)": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "AI Failure Analysis Agent",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Bug-Worthy? (AppDefect or AutomationDefect)": {
+      "main": [
+        [
+          {
+            "node": "Failure Summary Generator Agent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Not Bug-Worthy Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Failure Summary Generator Agent": {
+      "main": [
+        [
+          {
+            "node": "Bug Draft Generator Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser (Summary)": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Failure Summary Generator Agent",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Bug Draft Generator Agent": {
+      "main": [
+        [
+          {
+            "node": "Prepare Jira Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser (Bug Draft)": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Bug Draft Generator Agent",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Failure Analysis Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          },
+          {
+            "node": "Failure Summary Generator Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          },
+          {
+            "node": "Bug Draft Generator Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Jira Payload": {
+      "main": [
+        [
+          {
+            "node": "Wait for Human Approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait for Human Approval": {
+      "main": [
+        [
+          {
+            "node": "Approved?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Approved?": {
+      "main": [
+        [
+          {
+            "node": "Create Jira Bug",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Combine Final Output (Rejected)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Jira Bug": {
+      "main": [
+        [
+          {
+            "node": "Combine Final Output (Approved)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true
+  },
+  "versionId": "e1f2a3b4-c5d6-4700-9000-000000012401",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "d4fd626aac667aafe8853a30557889c2711020a336e42d081a06267d32694745"
+  },
+  "nodeGroups": [],
+  "id": "bugDraft1204JsonID",
+  "tags": []
+}

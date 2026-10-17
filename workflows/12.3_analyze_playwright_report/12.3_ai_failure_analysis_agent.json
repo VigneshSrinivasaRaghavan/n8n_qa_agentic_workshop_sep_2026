@@ -1,0 +1,301 @@
+{
+  "name": "12.3_ai_failure_analysis_agent",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## WORKFLOW - AI FAILURE ANALYSIS AGENT + FLAKY TEST ANALYSIS\n\nUpload ONE Playwright JSON report file (results.json) that was generated with\nretries enabled (e.g. playwright.config.ts -> retries: 2, reporter: [['json',\n{ outputFile: 'results.json' }]]).\n\nWhy retries matter: a single failed run only tells you \"it failed once\".\nReal flaky-test EVIDENCE requires seeing multiple attempts of the SAME test -\ne.g. failed on attempt 1, passed cleanly on attempt 2 with no code/data change.\nPlaywright itself marks a test \"flaky\" when this happens, and this workflow\nsurfaces that evidence to the AI instead of letting it guess from one log.\n\nPipeline: Extract uploaded JSON -> parse out one test's full attempt-by-attempt\nresults (status/duration/error per retry) -> AI Failure Analysis Agent classifies\ninto exactly one of 5 categories (Flaky / AppDefect / AutomationDefect /\nDataIssue / EnvironmentIssue), citing the SPECIFIC evidence signals it used -\nnever a bare guess.\n\nIf multiple tests failed in the uploaded report, this workflow analyzes the\nFIRST flaky test found, or if none, the first consistently-failing test\n(simplified for a one-test-at-a-time demo).\n\nTwo sample reports are provided for your demo:\n- sample-flaky-report.json -> should classify as Flaky\n- sample-defect-report.json -> should classify as AppDefect (same error on\n  every retry, business-logic mismatch)\n\nNOTE: This parser only reads a few key fields (title, file, projectName,\nstatus, results[].retry/status/duration/error.message/stack). A real\nPlaywright JSON report has more fields than this - that's fine, extra fields\nare simply ignored.",
+        "height": 420,
+        "width": 620,
+        "color": 6
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "c3333333-0000-4000-8000-000000000301",
+      "name": "Sticky Note - Overview"
+    },
+    {
+      "parameters": {
+        "options": {
+          "allowFileUploads": true
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        48,
+        460
+      ],
+      "id": "c3333333-0000-4000-8000-000000000302",
+      "name": "When chat message received",
+      "webhookId": "e1f2a3b4-1203-4a00-8000-000000001203"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Turns the chat message's attached binary file(s) into separate items,\n// each with its binary moved under a single consistent key \"data\" - same\n// proven pattern used in the Code Reviewer workflow.\nconst item = $input.item;\nconst binary = item.binary || {};\nconst keys = Object.keys(binary);\nconst chatInput = item.json.chatInput || '';\n\nreturn keys.map((key) => ({\n  json: {\n    fileName: binary[key].fileName || key,\n    chatInput\n  },\n  binary: {\n    data: binary[key]\n  }\n}));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        320,
+        460
+      ],
+      "id": "c3333333-0000-4000-8000-000000000303",
+      "name": "Split Attached File Into Item"
+    },
+    {
+      "parameters": {
+        "operation": "text",
+        "binaryPropertyName": "data",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        560,
+        460
+      ],
+      "id": "c3333333-0000-4000-8000-000000000304",
+      "name": "Extract Report Text"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parses the uploaded Playwright JSON report, flattens all tests across\n// nested suites, and picks ONE test to analyze: prefer a test Playwright\n// itself marked \"flaky\" (richest evidence), otherwise the first\n// consistently-failing (\"unexpected\") test.\nconst text = $json.data ?? $json.text ?? $json.fileText ?? '';\n\nlet report;\ntry {\n  report = JSON.parse(text);\n} catch (e) {\n  return [{\n    json: {\n      noFailureFound: true,\n      chatInput: $('When chat message received').item.json.chatInput || '',\n      evidenceSummary: 'The uploaded file is not valid JSON. Please upload a Playwright JSON reporter output file (e.g. results.json).'\n    }\n  }];\n}\n\nfunction collectTests(suites, parentFile, out) {\n  for (const suite of (suites || [])) {\n    const currentFile = suite.file || parentFile;\n    for (const spec of (suite.specs || [])) {\n      for (const test of (spec.tests || [])) {\n        out.push({\n          title: spec.title,\n          file: currentFile,\n          projectName: test.projectName,\n          status: test.status,\n          results: (test.results || []).map((r) => ({\n            retry: r.retry,\n            status: r.status,\n            duration: r.duration,\n            errorMessage: (r.error && r.error.message) || (r.errors && r.errors[0] && r.errors[0].message) || null,\n            errorStack: (r.error && r.error.stack) || (r.errors && r.errors[0] && r.errors[0].stack) || null\n          }))\n        });\n      }\n    }\n    collectTests(suite.suites, currentFile, out);\n  }\n  return out;\n}\n\nconst allTests = collectTests(report.suites, null, []);\n\nlet target = allTests.find((t) => t.status === 'flaky');\nif (!target) target = allTests.find((t) => t.status === 'unexpected');\n\nif (!target) {\n  return [{\n    json: {\n      noFailureFound: true,\n      chatInput: $('When chat message received').item.json.chatInput || '',\n      evidenceSummary: 'No failing or flaky test was found in the uploaded report - every test passed on its first attempt. Nothing to classify.'\n    }\n  }];\n}\n\nlet evidenceSummary = `Test: ${target.title}\\nFile: ${target.file}\\nProject: ${target.projectName}\\nPlaywright's final computed status for this test: ${target.status}\\n\\nAttempt-by-attempt results:\\n`;\n\ntarget.results.forEach((r) => {\n  evidenceSummary += `- Retry ${r.retry}: ${r.status} (duration ${r.duration}ms)`;\n  if (r.errorMessage) {\n    evidenceSummary += `\\n  Error message: ${r.errorMessage}`;\n  }\n  evidenceSummary += `\\n`;\n});\n\nreturn [{\n  json: {\n    noFailureFound: false,\n    testTitle: target.title,\n    filePath: target.file,\n    chatInput: $('When chat message received').item.json.chatInput || '',\n    evidenceSummary\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        800,
+        460
+      ],
+      "id": "c3333333-0000-4000-8000-000000000305",
+      "name": "Parse Playwright JSON Report"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "c3333333-cond-0000-8000-000000000306",
+              "leftValue": "={{ $json.noFailureFound }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1040,
+        460
+      ],
+      "id": "c3333333-0000-4000-8000-000000000306",
+      "name": "Any Failure Found?"
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { output: $json.evidenceSummary } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1280,
+        320
+      ],
+      "id": "c3333333-0000-4000-8000-000000000307",
+      "name": "No Failure To Classify"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.chatInput ? $json.chatInput : 'Classify the uploaded test failure using the evidence provided.' }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "=You are a senior QA engineer specializing in root-cause triage of automated test failures.\n\nYou will receive EVIDENCE extracted directly from a Playwright JSON test report for ONE test, including:\n- The test title and file.\n- Playwright's own computed final status for this test (\"unexpected\" = failed with no successful retry; \"flaky\" = failed on an earlier attempt but passed on a later retry).\n- A full attempt-by-attempt breakdown: for each retry, the pass/fail status, duration, and (if failed) the exact error message.\n\nClassify this test failure into EXACTLY ONE of these 5 categories, based ONLY on the evidence given - never guess or default to the most common category without citing specific evidence from the data:\n\n1. \"Flaky\" - the test's outcome was inconsistent across identical attempts (e.g. failed on attempt 0, then passed cleanly on a retry with no code/data/environment change). Playwright's own \"flaky\" status on the test is itself a primary piece of evidence, but you must still explain WHY using the attempt data (e.g. a timing-sensitive wait, a race condition implied by the error wording, etc.).\n2. \"AppDefect\" - the error reflects a genuine application/business-logic problem (e.g. an assertion mismatch where the actual value is wrong per business rules, a broken UI flow, a bad backend response) that was CONSISTENT across all attempts (same or materially same failure every retry - NOT flaky).\n3. \"AutomationDefect\" - the error is caused by the test code/framework itself (e.g. a wrong/outdated locator, incorrect wait strategy, stale element handling, bad assertion logic) rather than genuine app behavior, and the error is CONSISTENT across all attempts.\n4. \"DataIssue\" - the error indicates a test-data problem (e.g. \"duplicate key\", \"record already exists\", dependent on stale seeded data) rather than a code or app defect.\n5. \"EnvironmentIssue\" - the error indicates an infrastructure/environment problem (e.g. connection refused, DNS failure, timeout connecting to a URL, certificate error, service unavailable) unrelated to the application's business logic or the test's own code.\n\nRULES:\n- If the attempts show an inconsistent outcome (a failing attempt followed by a clean pass with nothing else changed), that is strong evidence for \"Flaky\" - classify it as Flaky even if the failing attempt's error text could superficially fit another category, UNLESS you have a specific reason to believe the apparent fix was actually an environment/data self-correction (explain your reasoning either way).\n- If ALL attempts failed with the exact same (or materially same) error, it is NOT flaky - classify it using categories 2-5 based on what the error message/stack indicates.\n- You MUST list the exact evidenceSignals (direct quotes or precise paraphrases from the attempt data - retry number, status, error text) that led to your classification. Never classify without citing at least one specific signal from the actual data given.\n- Assign confidence: \"High\" if the evidence clearly and unambiguously supports one category, \"Medium\" if it's a reasonable read but some ambiguity exists, \"Low\" if the evidence is thin or contradictory.\n\nYou MUST always respond using the structured JSON output format provided to you. Never add any explanation text outside that JSON.\n\nEVIDENCE PACKAGE:\n{{ $json.evidenceSummary }}\n"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        1280,
+        560
+      ],
+      "id": "c3333333-0000-4000-8000-000000000308",
+      "name": "AI Failure Analysis Agent"
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\"type\": \"object\", \"properties\": {\"testTitle\": {\"type\": \"string\"}, \"filePath\": {\"type\": \"string\"}, \"classification\": {\"type\": \"string\", \"enum\": [\"Flaky\", \"AppDefect\", \"AutomationDefect\", \"DataIssue\", \"EnvironmentIssue\"]}, \"confidence\": {\"type\": \"string\", \"enum\": [\"High\", \"Medium\", \"Low\"]}, \"evidenceSignals\": {\"type\": \"array\", \"items\": {\"type\": \"string\"}}, \"reasoning\": {\"type\": \"string\"}}, \"required\": [\"testTitle\", \"filePath\", \"classification\", \"confidence\", \"evidenceSignals\", \"reasoning\"]}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [
+        1280,
+        840
+      ],
+      "id": "c3333333-0000-4000-8000-000000000309",
+      "name": "Structured Output Parser"
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-3.1-flash-lite",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1.2,
+      "position": [
+        1040,
+        840
+      ],
+      "id": "c3333333-0000-4000-8000-00000000030a",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "7ZV2lM8NAVqObDgh",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const result = $json.output;\n\nlet md = `### Failure Analysis Report\\n\\n`;\nmd += `**Test:** ${result.testTitle}\\n`;\nmd += `**File:** ${result.filePath}\\n\\n`;\nmd += `**Classification:** ${result.classification}\\n`;\nmd += `**Confidence:** ${result.confidence}\\n\\n`;\n\nmd += `**Evidence Signals Cited:**\\n`;\nfor (const sig of (result.evidenceSignals || [])) {\n  md += `- ${sig}\\n`;\n}\n\nmd += `\\n**Reasoning:** ${result.reasoning}\\n`;\n\nreturn [{ json: { output: md } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1520,
+        560
+      ],
+      "id": "c3333333-0000-4000-8000-00000000030b",
+      "name": "Format Final Output"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When chat message received": {
+      "main": [
+        [
+          {
+            "node": "Split Attached File Into Item",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Attached File Into Item": {
+      "main": [
+        [
+          {
+            "node": "Extract Report Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Report Text": {
+      "main": [
+        [
+          {
+            "node": "Parse Playwright JSON Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Playwright JSON Report": {
+      "main": [
+        [
+          {
+            "node": "Any Failure Found?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Any Failure Found?": {
+      "main": [
+        [
+          {
+            "node": "No Failure To Classify",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "AI Failure Analysis Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Failure Analysis Agent": {
+      "main": [
+        [
+          {
+            "node": "Format Final Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "AI Failure Analysis Agent",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Failure Analysis Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true
+  },
+  "versionId": "d0e1f2a3-b4c5-4600-9000-000000012301",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "d4fd626aac667aafe8853a30557889c2711020a336e42d081a06267d32694745"
+  },
+  "nodeGroups": [],
+  "id": "failureAnalysis1203JsonID",
+  "tags": []
+}

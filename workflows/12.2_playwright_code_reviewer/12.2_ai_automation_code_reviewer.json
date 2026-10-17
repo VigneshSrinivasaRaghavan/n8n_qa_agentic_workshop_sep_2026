@@ -1,0 +1,311 @@
+{
+  "name": "12.2_ai_automation_code_reviewer",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## WORKFLOW - AI AUTOMATION CODE REVIEWER\n\nAttach multiple files together in ONE chat message (e.g. login.spec.ts + LoginPage.ts +\ntestHelpers.ts). An optional text comment can go in the same message.\n\nPipeline: Extract uploaded files as text -> merge with Framework Context Pack (same\nconventions pack style used in the Playwright Test Generator workflow) -> AI reviews\nALL files together against 5 fixed categories: Assertions, Waits, Duplication,\nHardcodedData, FrameworkConvention -> findings report + a FULL rewritten corrected\nversion of every uploaded file, returned as real downloadable files.\n\nReviewing files TOGETHER (not one at a time) lets the agent catch duplication and\nrepeated hardcoded data ACROSS files - e.g. a test re-typing the same email/password\nthat a helper file already exports but isn't being used.\n\nNOTE: The Framework Context Pack content below is a generic placeholder - swap it for\nyour real framework's Page Object/spec/conventions exactly like in the Playwright Test\nGenerator workflow. Nothing else here needs to change.\n\nSample flawed files to use for a live demo: login.spec.ts, LoginPage.ts, testHelpers.ts\n(provided alongside this workflow).\n\nFile decoding now uses n8n's native \"Extract From File\" node (not a Code node) so it works regardless of how your n8n instance stores uploaded binary data.",
+        "height": 320,
+        "width": 600,
+        "color": 6
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "b2222222-0000-4000-8000-000000000210",
+      "name": "Sticky Note - Overview"
+    },
+    {
+      "parameters": {
+        "options": {
+          "allowFileUploads": true
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        48,
+        400
+      ],
+      "id": "b2222222-0000-4000-8000-000000000211",
+      "name": "When chat message received",
+      "webhookId": "d1e2f3a4-1202-4a00-8000-000000001202"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Turns the ONE chat message item (which has multiple binary files\n// attached) into N separate items - one per uploaded file - each with\n// its binary moved under a single consistent key \"data\". This is pure\n// object re-mapping (no content decoding here), so it works no matter\n// how/where the binary content is actually stored.\nconst item = $input.item;\nconst binary = item.binary || {};\nconst keys = Object.keys(binary);\nconst chatInput = item.json.chatInput || '';\n\nreturn keys.map((key) => ({\n  json: {\n    fileName: binary[key].fileName || key,\n    chatInput\n  },\n  binary: {\n    data: binary[key]\n  }\n}));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        320,
+        400
+      ],
+      "id": "b2222222-0000-4000-8000-000000000204",
+      "name": "Split Attached Files Into Items"
+    },
+    {
+      "parameters": {
+        "operation": "text",
+        "binaryPropertyName": "data",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        560,
+        400
+      ],
+      "id": "b2222222-0000-4000-8000-000000000212",
+      "name": "Extract Text From Each File"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Fetches filenames directly from the \"Split Attached Files Into Items\"\n// node (NOT via passthrough, since the native Extract From File node\n// strips custom json fields and only keeps its own output field).\n// Items stay in the same order through the chain, so index-matching is safe.\nconst splitItems = $('Split Attached Files Into Items').all();\nconst extractedItems = $input.all();\n\nlet combinedCode = '';\nconst uploadedFileNames = [];\n\nfor (let i = 0; i < extractedItems.length; i++) {\n  const fileName = (splitItems[i] && splitItems[i].json && splitItems[i].json.fileName) || `file${i + 1}`;\n  const text = extractedItems[i].json.data ?? extractedItems[i].json.text ?? extractedItems[i].json.fileText ?? '';\n  uploadedFileNames.push(fileName);\n  combinedCode += `--- File: ${fileName} ---\\n${text}\\n\\n`;\n}\n\nconst chatInput = $('When chat message received').item.json.chatInput || '';\n\nreturn [{\n  json: {\n    chatInput,\n    combinedCode,\n    uploadedFileNames\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        800,
+        400
+      ],
+      "id": "b2222222-0000-4000-8000-000000000213",
+      "name": "Collect Extracted File Text"
+    },
+    {
+      "parameters": {
+        "mode": "manual",
+        "duplicateItem": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "f2b2b2b2-0000-4000-8000-000000000201",
+              "name": "pageObjectSample",
+              "value": "import { Page, Locator } from '@playwright/test';\n\nexport class LoginPage {\n  readonly page: Page;\n  readonly usernameInput: Locator;\n  readonly passwordInput: Locator;\n  readonly loginButton: Locator;\n  readonly errorMessage: Locator;\n\n  constructor(page: Page) {\n    this.page = page;\n    this.usernameInput = page.locator('#username');\n    this.passwordInput = page.locator('#password');\n    this.loginButton = page.locator('button[type=\"submit\"]');\n    this.errorMessage = page.locator('.error-banner');\n  }\n\n  async goto() {\n    await this.page.goto('/login');\n  }\n\n  async login(username: string, password: string) {\n    await this.usernameInput.fill(username);\n    await this.passwordInput.fill(password);\n    await this.loginButton.click();\n  }\n\n  async getErrorMessageText(): Promise<string> {\n    return (await this.errorMessage.textContent()) ?? '';\n  }\n}",
+              "type": "string"
+            },
+            {
+              "id": "f2b2b2b2-0000-4000-8000-000000000202",
+              "name": "testSpecSample",
+              "value": "import { test, expect } from '@playwright/test';\nimport { LoginPage } from '../pages/LoginPage';\n\ntest.describe('Login Page', () => {\n  let loginPage: LoginPage;\n\n  test.beforeEach(async ({ page }) => {\n    loginPage = new LoginPage(page);\n    await loginPage.goto();\n  });\n\n  test('TC-LOGIN-01: should login successfully with valid credentials', async ({ page }) => {\n    await loginPage.login('validuser@test.com', 'ValidPass123');\n    await expect(page).toHaveURL(/dashboard/);\n  });\n\n  test('TC-LOGIN-02: should show error with invalid password', async ({ page }) => {\n    await loginPage.login('validuser@test.com', 'WrongPass999');\n    await expect(loginPage.errorMessage).toBeVisible();\n    const errorText = await loginPage.getErrorMessageText();\n    expect(errorText).toContain('Invalid');\n  });\n});",
+              "type": "string"
+            },
+            {
+              "id": "f2b2b2b2-0000-4000-8000-000000000203",
+              "name": "conventions",
+              "value": "FRAMEWORK CONVENTIONS:\n- Page Objects live in /pages, test specs live in /tests, shared helpers live in /utils.\n- Page Object class name = UpperCamelCase feature name + \"Page\" (e.g. LoginPage, CheckoutPage).\n- All locators are declared ONCE as readonly Locator properties in the constructor using page.locator(...) - never re-declare the same locator string again inside a method.\n- Reusable user actions (e.g. login, submitForm) are async methods on the Page Object class - never put raw locator calls or page.locator(...) directly inside test files.\n- Test file names: kebab-case + \".spec.ts\", matching the feature (e.g. login.spec.ts).\n- Test titles follow the pattern: \"TC-<FEATURE>-<NUMBER>: should <expected behavior>\".\n- Assertions use Playwright's built-in expect from '@playwright/test' - prefer precise web-first assertions (toBeVisible, toHaveURL, toHaveText) over generic boolean checks like toBeTruthy()/toBeFalsy().\n- Use test.beforeEach for navigation/setup shared across tests in a describe block - never repeat the same goto/setup steps inside every single test body.\n- Never hardcode wait/sleep calls (no page.waitForTimeout) - rely on Playwright's auto-waiting and web-first assertions.\n- Do not duplicate the same hardcoded test data (emails, passwords, URLs) across multiple tests or files - reuse shared constants/helpers from /utils instead of re-typing literal values.\n- Keep each test independent and self-contained - do not rely on state/order from a previous test.",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {
+          "includeOtherFields": true
+        }
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1040,
+        500
+      ],
+      "id": "b2222222-0000-4000-8000-000000000203",
+      "name": "Framework Context Pack (Edit Fields)"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Pulls the extracted file content directly from \"Collect Extracted File\n// Text\" by node reference - this makes it immune to whatever the Framework\n// Context Pack (Set) node above does or doesn't pass through.\nconst collected = $('Collect Extracted File Text').item.json;\nconst { pageObjectSample, testSpecSample, conventions } = $json;\n\nconst frameworkContext = `SAMPLE PAGE OBJECT (reference style):\n${pageObjectSample}\n\nSAMPLE TEST SPEC (reference style):\n${testSpecSample}\n\n${conventions}`;\n\nreturn [{\n  json: {\n    uploadedFileNames: collected.uploadedFileNames,\n    frameworkContext,\n    combinedCode: collected.combinedCode,\n    chatInput: collected.chatInput\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1280,
+        400
+      ],
+      "id": "b2222222-0000-4000-8000-000000000205",
+      "name": "Build Review Prompt"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Review the following uploaded automation code.\n\nStudent comment (if any): {{ $json.chatInput }}\n\nUploaded Files:\n{{ $json.combinedCode }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "=You are a senior SDET performing an automation code review on the files a student has uploaded (test spec(s), Page Object(s), and/or utility/helper files).\n\nReview ALL uploaded files TOGETHER (not in isolation) and flag every issue that falls into ONLY these categories:\n\n1. \"Assertions\" - missing, weak, or imprecise assertions (e.g. generic toBeTruthy()/toBeFalsy() instead of precise web-first assertions like toBeVisible/toHaveText/toHaveURL; or missing an assertion entirely where one is clearly needed).\n2. \"Waits\" - hardcoded sleep/timeout calls (e.g. page.waitForTimeout), or any other anti-pattern instead of relying on Playwright's auto-waiting and web-first assertions.\n3. \"Duplication\" - the same code block, locator string, or setup steps repeated WITHIN a file or ACROSS the uploaded files, instead of being extracted into a reusable method/fixture/helper.\n4. \"HardcodedData\" - literal test data (emails, passwords, URLs, IDs) typed directly into test/page object code instead of being defined as a shared constant or pulled from a helper/fixture - including cases where a helper file with that exact data already exists but isn't being used.\n5. \"FrameworkConvention\" - any mismatch against the FRAMEWORK CONTEXT PACK below: naming, file structure, Page Object usage pattern, assertion style, title format, etc.\n\nDo not invent issues that are not actually present. Be specific: always name the exact file and the exact line/snippet the issue relates to.\n\nFor EACH issue found, provide: id (sequential, e.g. ISSUE-01), file (exact filename as uploaded), category (exactly one of the 5 above), severity (\"High\" = will cause flaky/incorrect test results or a real framework-fit break, \"Medium\" = real but non-breaking quality issue, \"Low\" = minor/stylistic), issue (short title), explanation (why this is a problem), suggestedFix (what to change, in words).\n\nThen, for EACH uploaded file (using its EXACT original filename), produce:\n- correctedCode: a FULL corrected rewrite of that entire file with every identified issue fixed and fully aligned with the Framework Context Pack's conventions - not just a snippet or diff.\n- summaryOfChanges: a clear, plain-language explanation of EXACTLY what you changed in THIS specific file and WHY, explicitly referencing the relevant issue IDs (e.g. \"Removed hardcoded waitForTimeout calls (ISSUE-02, ISSUE-03) and replaced with web-first assertions; extracted repeated email/password literals (ISSUE-05) into getValidEmail()/getValidPassword() from testHelpers.ts\"). If a file needed no changes at all, say so explicitly instead of inventing changes.\n\nIf a file has no issues at all, still include it in correctedFiles unchanged, with summaryOfChanges stating no changes were needed (so the student always gets a complete, consistent set of files back).\n\nYou MUST always respond using the structured JSON output format provided to you. Never add any explanation text outside that JSON.\n\nFRAMEWORK CONTEXT PACK:\n{{ $json.frameworkContext }}\n\nUPLOADED FILE NAMES: {{ $json.uploadedFileNames.join(', ') }}\n"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        1520,
+        400
+      ],
+      "id": "b2222222-0000-4000-8000-000000000206",
+      "name": "AI Automation Code Reviewer Agent"
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\"type\": \"object\", \"properties\": {\"overallSummary\": {\"type\": \"string\"}, \"findings\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"properties\": {\"id\": {\"type\": \"string\"}, \"file\": {\"type\": \"string\"}, \"category\": {\"type\": \"string\", \"enum\": [\"Assertions\", \"Waits\", \"Duplication\", \"HardcodedData\", \"FrameworkConvention\"]}, \"severity\": {\"type\": \"string\", \"enum\": [\"High\", \"Medium\", \"Low\"]}, \"issue\": {\"type\": \"string\"}, \"explanation\": {\"type\": \"string\"}, \"suggestedFix\": {\"type\": \"string\"}}, \"required\": [\"id\", \"file\", \"category\", \"severity\", \"issue\", \"explanation\", \"suggestedFix\"]}}, \"correctedFiles\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"properties\": {\"fileName\": {\"type\": \"string\"}, \"correctedCode\": {\"type\": \"string\"}, \"summaryOfChanges\": {\"type\": \"string\", \"description\": \"Plain-language explanation of exactly what was changed in THIS file and why, referencing the specific issue IDs fixed. If no changes were needed, state that clearly.\"}}, \"required\": [\"fileName\", \"correctedCode\", \"summaryOfChanges\"]}}}, \"required\": [\"overallSummary\", \"findings\", \"correctedFiles\"]}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [
+        1520,
+        680
+      ],
+      "id": "b2222222-0000-4000-8000-000000000207",
+      "name": "Structured Output Parser"
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-3.1-flash-lite",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1.2,
+      "position": [
+        1280,
+        680
+      ],
+      "id": "b2222222-0000-4000-8000-000000000208",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "7ZV2lM8NAVqObDgh",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const result = $json.output;\n\nconst sevOrder = { High: 0, Medium: 1, Low: 2 };\nconst findings = result.findings || [];\nconst correctedFiles = result.correctedFiles || [];\n\nlet md = `### Code Review Report\\n\\n`;\nmd += `**Overall Summary:** ${result.overallSummary}\\n\\n`;\n\nif (findings.length === 0) {\n  md += `No issues found across any uploaded file.\\n\\n`;\n}\n\nmd += `---\\n\\n`;\n\nfor (const file of correctedFiles) {\n  const fileFindings = findings\n    .filter((f) => f.file === file.fileName)\n    .sort((a, b) => (sevOrder[a.severity] ?? 3) - (sevOrder[b.severity] ?? 3));\n\n  md += `## File: ${file.fileName}\\n\\n`;\n\n  if (fileFindings.length === 0) {\n    md += `No issues found in this file.\\n\\n`;\n  } else {\n    md += `**Issues found (${fileFindings.length}):**\\n\\n`;\n    for (const f of fileFindings) {\n      md += `- [${f.id}] (${f.category} / ${f.severity}) ${f.issue}\\n`;\n      md += `  - Why: ${f.explanation}\\n`;\n      md += `  - Fix applied: ${f.suggestedFix}\\n\\n`;\n    }\n  }\n\n  md += `**What changed in this file & why:** ${file.summaryOfChanges}\\n\\n`;\n  md += `Corrected file \\`${file.fileName}\\` is attached below.\\n\\n`;\n  md += `---\\n\\n`;\n}\n\nconst binary = {};\ncorrectedFiles.forEach((file, idx) => {\n  binary['correctedFile' + idx] = {\n    data: Buffer.from(file.correctedCode, 'utf-8').toString('base64'),\n    mimeType: 'text/plain',\n    fileName: file.fileName,\n    fileExtension: (file.fileName.split('.').pop() || 'txt')\n  };\n});\n\nreturn [{ json: { output: md }, binary }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        400
+      ],
+      "id": "b2222222-0000-4000-8000-000000000209",
+      "name": "Format & Package Review Output"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When chat message received": {
+      "main": [
+        [
+          {
+            "node": "Split Attached Files Into Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Framework Context Pack (Edit Fields)": {
+      "main": [
+        [
+          {
+            "node": "Build Review Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Review Prompt": {
+      "main": [
+        [
+          {
+            "node": "AI Automation Code Reviewer Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Automation Code Reviewer Agent": {
+      "main": [
+        [
+          {
+            "node": "Format & Package Review Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "AI Automation Code Reviewer Agent",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Automation Code Reviewer Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Attached Files Into Items": {
+      "main": [
+        [
+          {
+            "node": "Extract Text From Each File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Text From Each File": {
+      "main": [
+        [
+          {
+            "node": "Collect Extracted File Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect Extracted File Text": {
+      "main": [
+        [
+          {
+            "node": "Framework Context Pack (Edit Fields)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true
+  },
+  "versionId": "c9d0e1f2-a3b4-4500-9000-000000012205",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "d4fd626aac667aafe8853a30557889c2711020a336e42d081a06267d32694745"
+  },
+  "nodeGroups": [],
+  "id": "codeReviewer1202JsonID",
+  "tags": []
+}

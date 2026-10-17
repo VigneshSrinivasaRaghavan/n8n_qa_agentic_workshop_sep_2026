@@ -1,0 +1,44 @@
+{
+  "config": {},
+  "suites": [
+    {
+      "title": "Checkout Flow",
+      "file": "tests/checkout.spec.ts",
+      "specs": [],
+      "suites": [
+        {
+          "title": "Checkout Flow > Payment",
+          "file": "tests/checkout.spec.ts",
+          "specs": [
+            {
+              "title": "should complete checkout with saved card",
+              "tests": [
+                {
+                  "projectName": "chromium",
+                  "status": "flaky",
+                  "results": [
+                    {
+                      "retry": 0,
+                      "status": "failed",
+                      "duration": 8032,
+                      "error": {
+                        "message": "TimeoutError: locator.click: Timeout 5000ms exceeded.\nwaiting for locator('[data-testid=\"place-order-btn\"]') to be visible",
+                        "stack": "TimeoutError: locator.click: Timeout 5000ms exceeded.\n    at CheckoutPage.placeOrder (pages/CheckoutPage.ts:42:10)\n    at tests/checkout.spec.ts:18:5"
+                      }
+                    },
+                    {
+                      "retry": 1,
+                      "status": "passed",
+                      "duration": 2140
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "suites": []
+        }
+      ]
+    }
+  ]
+}

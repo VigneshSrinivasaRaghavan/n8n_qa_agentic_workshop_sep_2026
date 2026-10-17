@@ -1,0 +1,233 @@
+{
+  "name": "12.1_playwright_automation",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## WORKFLOW - AI PLAYWRIGHT TEST GENERATOR (Automation Context Engineering)\n\nPaste in chat BOTH of these in one message:\n1. Scenario: a plain-English description of what to test\n2. Locators: element name -> selector pairs (only elements you want the AI to use)\n\nExample input:\nScenario: Verify login fails with wrong password and shows an error banner\nLocators:\nusernameInput: #username\npasswordInput: #password\nloginButton: button[type=\"submit\"]\nerrorMessage: .error-banner\n\nPipeline: Context Pack (framework example + conventions, static) -> Playwright Test Generator Agent\n(must reuse ONLY the locators you gave, never invent one) -> Structured Output -> Formatted code reply.\n\nIf the scenario needs an element you didn't give a locator for, the agent will NOT guess a selector -\nit inserts a TODO comment and lists it under \"Missing Locators\" in the reply instead.\n\nNOTE: The sample Page Object / test spec / conventions in the \"Context Pack\" node are a generic\nplaceholder (a simple login page). Swap them for real examples from your own framework later -\nnothing else in this workflow needs to change.\n\nThe final chat reply now also includes two real downloadable .ts file attachments (Page Object + test spec), built in the last Code node using Buffer-based binary conversion - not just code pasted as text.\n\nThe framework example is now stored as plain text in the \"Context Pack - Framework Inputs (Edit Fields)\" node (3 separate fields: pageObjectSample, testSpecSample, conventions) - no code editing or escaping needed. To use your own real framework, just open that node and paste your actual Page Object / test spec / conventions straight in, then re-run.",
+        "height": 320,
+        "width": 560,
+        "color": 6
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "a1111111-0000-4000-8000-000000000001",
+      "name": "Sticky Note - Overview"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        48,
+        400
+      ],
+      "id": "a1111111-0000-4000-8000-000000000002",
+      "name": "When chat message received",
+      "webhookId": "c1d2e3f4-1301-4a00-8000-000000001301"
+    },
+    {
+      "parameters": {
+        "mode": "manual",
+        "duplicateItem": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "f1a1a1a1-0000-4000-8000-000000000101",
+              "name": "pageObjectSample",
+              "value": "import { Page, Locator } from '@playwright/test';\n\nexport class LoginPage {\n  readonly page: Page;\n  readonly usernameInput: Locator;\n  readonly passwordInput: Locator;\n  readonly loginButton: Locator;\n  readonly errorMessage: Locator;\n\n  constructor(page: Page) {\n    this.page = page;\n    this.usernameInput = page.locator('#username');\n    this.passwordInput = page.locator('#password');\n    this.loginButton = page.locator('button[type=\"submit\"]');\n    this.errorMessage = page.locator('.error-banner');\n  }\n\n  async goto() {\n    await this.page.goto('/login');\n  }\n\n  async login(username: string, password: string) {\n    await this.usernameInput.fill(username);\n    await this.passwordInput.fill(password);\n    await this.loginButton.click();\n  }\n\n  async getErrorMessageText(): Promise<string> {\n    return (await this.errorMessage.textContent()) ?? '';\n  }\n}",
+              "type": "string"
+            },
+            {
+              "id": "f1a1a1a1-0000-4000-8000-000000000102",
+              "name": "testSpecSample",
+              "value": "import { test, expect } from '@playwright/test';\nimport { LoginPage } from '../pages/LoginPage';\n\ntest.describe('Login Page', () => {\n  let loginPage: LoginPage;\n\n  test.beforeEach(async ({ page }) => {\n    loginPage = new LoginPage(page);\n    await loginPage.goto();\n  });\n\n  test('TC-LOGIN-01: should login successfully with valid credentials', async ({ page }) => {\n    await loginPage.login('validuser@test.com', 'ValidPass123');\n    await expect(page).toHaveURL(/dashboard/);\n  });\n\n  test('TC-LOGIN-02: should show error with invalid password', async ({ page }) => {\n    await loginPage.login('validuser@test.com', 'WrongPass999');\n    await expect(loginPage.errorMessage).toBeVisible();\n    const errorText = await loginPage.getErrorMessageText();\n    expect(errorText).toContain('Invalid');\n  });\n});",
+              "type": "string"
+            },
+            {
+              "id": "f1a1a1a1-0000-4000-8000-000000000103",
+              "name": "conventions",
+              "value": "FRAMEWORK CONVENTIONS:\n- Page Objects live in /pages, test specs live in /tests.\n- Page Object class name = UpperCamelCase feature name + \"Page\" (e.g. LoginPage, CheckoutPage).\n- All locators are declared as readonly Locator properties, assigned in the constructor using page.locator(...).\n- Reusable user actions (e.g. login, submitForm) are async methods on the Page Object class - never put raw locator calls inside test files.\n- Test file names: kebab-case + \".spec.ts\", matching the feature (e.g. login.spec.ts).\n- Test titles follow the pattern: \"TC-<FEATURE>-<NUMBER>: should <expected behavior>\".\n- Assertions use Playwright's built-in expect from '@playwright/test' - prefer web-first assertions (toBeVisible, toHaveURL, toHaveText) over manual boolean checks.\n- Use test.beforeEach for navigation/setup shared across tests in a describe block.\n- Never hardcode wait/sleep calls (no page.waitForTimeout) - rely on Playwright's auto-waiting and web-first assertions.\n- Do not duplicate the same hardcoded test data across multiple tests - define it as local consts at the top of the test or describe block.\n- Keep each test independent and self-contained - do not rely on state/order from a previous test.",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        320,
+        300
+      ],
+      "id": "a1111111-0000-4000-8000-000000000003",
+      "name": "Context Pack - Framework Inputs (Edit Fields)"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generic merge - this node never needs editing even when students\n// replace the sample code above with their own real framework files.\nconst chatInput = $('When chat message received').item.json.chatInput;\nconst { pageObjectSample, testSpecSample, conventions } = $json;\n\nconst contextPack = `SAMPLE PAGE OBJECT (pages/LoginPage.ts) - replicate this exact style:\n${pageObjectSample}\n\nSAMPLE TEST SPEC (tests/login.spec.ts) - replicate this exact style:\n${testSpecSample}\n\n${conventions}\n\nNOTE TO STUDENT: The two code samples and conventions above are a generic placeholder.\nIn a real project, replace them in the \"Context Pack - Framework Inputs\" node with an\nactual Page Object and test spec copied from your own automation framework. Nothing\nelse in this workflow needs to change.`;\n\nreturn [{\n  json: {\n    chatInput,\n    contextPack\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        600,
+        300
+      ],
+      "id": "a1111111-0000-4000-8000-000000000103",
+      "name": "Build Context Pack String"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.chatInput }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "=You are a senior SDET who generates Playwright TypeScript test code that strictly matches an existing automation framework's conventions.\n\nYou will be given:\n1. A FRAMEWORK CONTEXT PACK below (a sample Page Object class, a sample test spec, and a written conventions list) - this defines the EXACT style and structure you must replicate.\n2. A test SCENARIO description and a list of LOCATORS, both supplied by the student in their message (element name -> selector).\n\nSTRICT RULES:\n1. Follow the Context Pack's conventions precisely: file naming, class/method naming, Page Object pattern usage, assertion style, test title format, no hardcoded waits, no duplicated hardcoded data.\n2. Produce a Page Object class (new or an extension matching the sample's style) containing only the methods needed for the given scenario, and a test spec file that uses that Page Object, matching the sample's structure.\n3. You MUST use ONLY the locators explicitly supplied by the student, using their exact selector values and exact element names. NEVER invent, guess, or assume any CSS/XPath selector that was not given to you.\n4. If the scenario requires interacting with an element for which no locator was supplied, do NOT invent one. Instead:\n   - Insert a clearly marked comment in the code at that exact spot, formatted as: // TODO: Locator missing for '<element name>' - replace this placeholder before running.\n   - Add that exact element name as a string into the missingLocators array in your output.\n5. Reuse the exact locator variable naming the student gave (e.g. if they call an element usernameInput, keep calling it usernameInput in the Page Object - do not rename it).\n6. Never fabricate application behavior (URLs, response text, success messages) that was not stated in the scenario or shown in the sample files - keep assertions generic/reasonable when not specified, and mention this in notes.\n7. Respond ONLY using the structured JSON output format provided to you. Never add any explanation text outside that JSON.\n\nFRAMEWORK CONTEXT PACK:\n{{ $json.contextPack }}\n"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        880,
+        400
+      ],
+      "id": "a1111111-0000-4000-8000-000000000004",
+      "name": "Playwright Test Generator Agent"
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\"type\": \"object\", \"properties\": {\"pageObjectFileName\": {\"type\": \"string\"}, \"pageObjectCode\": {\"type\": \"string\"}, \"testSpecFileName\": {\"type\": \"string\"}, \"testCode\": {\"type\": \"string\"}, \"missingLocators\": {\"type\": \"array\", \"items\": {\"type\": \"string\"}, \"description\": \"Element names the scenario needed but the student did not supply a locator for\"}, \"notes\": {\"type\": \"string\"}}, \"required\": [\"pageObjectFileName\", \"pageObjectCode\", \"testSpecFileName\", \"testCode\", \"missingLocators\", \"notes\"]}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [
+        880,
+        680
+      ],
+      "id": "a1111111-0000-4000-8000-000000000005",
+      "name": "Structured Output Parser"
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-3.1-flash-lite",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1.2,
+      "position": [
+        600,
+        680
+      ],
+      "id": "a1111111-0000-4000-8000-000000000006",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "7ZV2lM8NAVqObDgh",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const result = $json.output;\n\nlet md = `### Generated Playwright Files\\n\\n`;\nmd += `**Page Object File:** \\`${result.pageObjectFileName}\\`\\n\\n`;\nmd += \"```typescript\\n\" + result.pageObjectCode + \"\\n```\\n\\n\";\nmd += `**Test Spec File:** \\`${result.testSpecFileName}\\`\\n\\n`;\nmd += \"```typescript\\n\" + result.testCode + \"\\n```\\n\\n\";\n\nif (result.missingLocators && result.missingLocators.length > 0) {\n  md += `**MISSING LOCATORS - the AI did NOT guess these. Please supply them and re-run:**\\n`;\n  for (const m of result.missingLocators) {\n    md += `- ${m}\\n`;\n  }\n  md += `\\n`;\n} else {\n  md += `All required locators were supplied - no selectors were guessed.\\n\\n`;\n}\n\nmd += `**Notes:** ${result.notes}\\n\\n`;\nmd += `Two downloadable .ts files are attached to this message - save them directly into your framework's /pages and /tests folders.`;\n\n// Build real downloadable .ts files from the generated code strings.\n// n8n lets a Code node attach binary data directly on the returned item,\n// as long as \"data\" is a base64 string - no extra node type is needed.\nreturn [{\n  json: { output: md },\n  binary: {\n    pageObjectFile: {\n      data: Buffer.from(result.pageObjectCode, 'utf-8').toString('base64'),\n      mimeType: 'text/plain',\n      fileName: result.pageObjectFileName.split('/').pop(),\n      fileExtension: 'ts'\n    },\n    testSpecFile: {\n      data: Buffer.from(result.testCode, 'utf-8').toString('base64'),\n      mimeType: 'text/plain',\n      fileName: result.testSpecFileName.split('/').pop(),\n      fileExtension: 'ts'\n    }\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1160,
+        400
+      ],
+      "id": "a1111111-0000-4000-8000-000000000007",
+      "name": "Format & Package Output (Text + .ts Files)"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When chat message received": {
+      "main": [
+        [
+          {
+            "node": "Context Pack - Framework Inputs (Edit Fields)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Playwright Test Generator Agent": {
+      "main": [
+        [
+          {
+            "node": "Format & Package Output (Text + .ts Files)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Playwright Test Generator Agent",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Playwright Test Generator Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Context Pack - Framework Inputs (Edit Fields)": {
+      "main": [
+        [
+          {
+            "node": "Build Context Pack String",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Context Pack String": {
+      "main": [
+        [
+          {
+            "node": "Playwright Test Generator Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true
+  },
+  "versionId": "d4e5f6a7-b8c9-4000-9000-000000013003",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "d4fd626aac667aafe8853a30557889c2711020a336e42d081a06267d32694745"
+  },
+  "nodeGroups": [],
+  "id": "pw13101AutoGenJsonID",
+  "tags": []
+}
